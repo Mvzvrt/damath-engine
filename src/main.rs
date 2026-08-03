@@ -12,14 +12,10 @@ fn main() {
     );
 
     loop {
-        // Clear terminal screen and reset cursor to top-left (ANSI escape code)
         print!("\x1B[2J\x1B[1;1H");
-
-        // Display the current board
         board.display();
-
-        // Print Status / Error info section
         println!("-------------------------------------------------------");
+        println!("Turn: {:?}", board.current_turn);
         println!("Player 1: {}", board.p1_score);
         println!("Player 2: {}", board.p2_score);
         println!("Info: {}", info_message);

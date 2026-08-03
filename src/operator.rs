@@ -15,8 +15,7 @@ impl Operator {
             Operator::Div => {
                 if captured == 0 {
                     0
-                }
-                else {
+                } else {
                     captor / captured
                 }
             }
