@@ -21,7 +21,6 @@ fn main() {
         println!("Info: {}", info_message);
         println!("-------------------------------------------------------");
 
-        // Check for quit condition or prompt for input
         print!("Move (or type 'quit'): ");
         io::stdout().flush().unwrap();
 
@@ -37,7 +36,6 @@ fn main() {
             break;
         }
 
-        // Parse coordinates from input: expect 4 space-separated integers
         let parts: Vec<i32> = input
             .split_whitespace()
             .filter_map(|s| s.parse::<i32>().ok())
@@ -54,7 +52,6 @@ fn main() {
         let to_row = parts[2];
         let to_col = parts[3];
 
-        // Execute the move
         match board.make_move(from_row, from_col, to_row, to_col) {
             Ok(()) => {
                 info_message = format!(
