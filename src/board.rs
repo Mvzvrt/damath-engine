@@ -1,9 +1,13 @@
 use crate::piece::{Chip, Player};
+use crate::operator::{Operator};
 
 pub struct Board {
     pub p1_pieces: u64,
     pub p2_pieces: u64,
+    pub p1_score: i32,
+    pub p2_score: i32,
     pub dama_pieces: u64,
+    pub operators: [Operator; 64],
     pub chips: [Option<Chip>; 64],
     pub current_turn: Player,
 }
@@ -16,11 +20,15 @@ impl Board {
         let mut board = Self {
             p1_pieces,
             p2_pieces,
+            p1_score: 0,
+            p2_score: 0,
             dama_pieces: 0,
             chips: [None; 64],
+            operators: [Operator::Add; 64],
             current_turn: Player::Player1,
         };
 
+        board.init_operators();
         board.init_integer_chips();
         board
     }
@@ -125,8 +133,14 @@ impl Board {
                     None => return Err("Jump Capture Error: No piece to capture"),
                 };
 
-                let captured_value = jumped_chip.value;
-                println!("Captured opponent chip with value: {}", captured_value);
+                
+                let operator = self.operators[to_idx];
+                let points = operator.apply(chip.value, jumped_chip.value);
+
+                match self.current_turn {
+                    Player::Player1 => self.p1_score += points,
+                    Player::Player2 => self.p2_score += points,
+                }
 
                 self.chips[mid_idx] = None;
                 self.clear_bit(mid_idx, jumped_chip.player);
@@ -206,6 +220,48 @@ impl Board {
         for &(row, col, val) in &p2_layout {
             let idx = row * 8 + col;
             self.chips[idx] = Some(Chip::new(Player::Player2, val));
+        }
+    }
+
+    fn init_operators(&mut self) {
+        for row in 0..8 {
+            for col in 0..8 {
+                let idx = row * 8 + col;
+                
+                let op = match row {
+                    0 | 4 => match col {
+                        1 => Operator::Add,
+                        3 => Operator::Sub,
+                        5 => Operator::Div,
+                        7 => Operator::Mul,
+                        _ => Operator::Add,
+                    },
+                    1 | 5 => match col {
+                        0 => Operator::Sub,
+                        2 => Operator::Add,
+                        4 => Operator::Mul,
+                        6 => Operator::Div,
+                        _ => Operator::Add,
+                    },
+                    2 | 6 => match col {
+                        1 => Operator::Div,
+                        3 => Operator::Mul,
+                        5 => Operator::Add,
+                        7 => Operator::Sub,
+                        _ => Operator::Add,
+                    },
+                    3 | 7 => match col {
+                        0 => Operator::Mul,
+                        2 => Operator::Div,
+                        4 => Operator::Sub,
+                        6 => Operator::Add,
+                        _ => Operator::Add,
+                    },
+                    _ => Operator::Add,
+                };
+
+                self.operators[idx] = op;
+            }
         }
     }
 }

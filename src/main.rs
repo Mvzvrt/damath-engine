@@ -1,4 +1,5 @@
 mod board;
+mod operator;
 mod piece;
 
 use board::Board;
@@ -19,6 +20,8 @@ fn main() {
 
         // Print Status / Error info section
         println!("-------------------------------------------------------");
+        println!("Player 1: {}", board.p1_score);
+        println!("Player 2: {}", board.p2_score);
         println!("Info: {}", info_message);
         println!("-------------------------------------------------------");
 
