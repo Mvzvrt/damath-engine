@@ -7,6 +7,7 @@ pub enum Operator {
 }
 
 impl Operator {
+    #[inline(always)]
     pub fn apply(&self, captor: i32, captured: i32) -> i32 {
         match self {
             Operator::Add => captor + captured,

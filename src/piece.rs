@@ -4,19 +4,24 @@ pub enum Player {
     Player2,
 }
 
-#[derive(Copy, Clone, Debug)]
+impl Player {
+    #[inline(always)]
+    pub fn opponent(self) -> Player {
+        match self {
+            Player::Player1 => Player::Player2,
+            Player::Player2 => Player::Player1,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Chip {
-    pub player: Player,
     pub value: i32,
-    pub is_dama: bool,
 }
 
 impl Chip {
-    pub fn new(player: Player, value: i32) -> Self {
-        Self {
-            player,
-            value,
-            is_dama: false,
-        }
+    #[inline(always)]
+    pub fn new(value: i32) -> Self {
+        Self { value }
     }
 }
