@@ -24,6 +24,20 @@ fn shift_se(bb: u64) -> u64 {
 
 const SHIFTS: [fn(u64) -> u64; 4] = [shift_nw, shift_ne, shift_sw, shift_se];
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct Move {
+    pub from_row: i32,
+    pub from_col: i32,
+    pub to_row: i32,
+    pub to_col: i32,
+}
+
+impl Move {
+    pub fn is_capture(&self) -> bool {
+        (self.to_row - self.from_row).abs() >= 2
+    }
+}
+
 pub struct Board {
     pub p1_pieces: u64,
     pub p2_pieces: u64,
@@ -67,7 +81,7 @@ impl Board {
         let bottom_border = "   └─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘  ";
         let gap = "   ";
 
-        println!("{}{}{}", "   BOARD", gap, "   OPERATORS");
+        println!("{}{}{}", "                        BOARD", gap, "                                                OPERATORS");
         println!("{}{}{}", col_header, gap, col_header);
         println!("{}{}{}", top_border, gap, top_border);
 
@@ -224,6 +238,171 @@ impl Board {
             }
         }
         false
+    }
+
+    pub fn generate_moves(&self) -> Vec<Move> {
+        let mover = self.current_turn;
+
+        if let Some((r, c)) = self.forced_piece {
+            return self.generate_captures_for_piece(r as i32, c as i32);
+        }
+
+        if self.player_has_any_capture(mover) {
+            return self.generate_all_captures(mover);
+        }
+
+        self.generate_all_slides(mover)
+    }
+
+    fn owner_bits(&self, player: Player) -> u64 {
+        match player {
+            Player::Player1 => self.p1_pieces,
+            Player::Player2 => self.p2_pieces,
+        }
+    }
+
+    fn generate_all_captures(&self, mover: Player) -> Vec<Move> {
+        let mut moves = Vec::new();
+        let mut bb = self.owner_bits(mover);
+        while bb != 0 {
+            let idx = bb.trailing_zeros() as i32;
+            moves.extend(self.generate_captures_for_piece(idx / 8, idx % 8));
+            bb &= bb - 1;
+        }
+        moves
+    }
+
+    fn generate_captures_for_piece(&self, row: i32, col: i32) -> Vec<Move> {
+        let from_idx = (row * 8 + col) as usize;
+        let from_bit = 1u64 << from_idx;
+        let is_dama = (self.dama_pieces & from_bit) != 0;
+        let is_p1 = (self.p1_pieces & from_bit) != 0;
+        let opponent = if is_p1 {
+            self.p2_pieces
+        } else {
+            self.p1_pieces
+        };
+        let occupied = self.p1_pieces | self.p2_pieces;
+
+        let mut moves = Vec::new();
+        let directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)];
+
+        for &(dr, dc) in &directions {
+            if is_dama {
+                let mut step = 1;
+                let mut jumped = false;
+                loop {
+                    let r = row + dr * step;
+                    let c = col + dc * step;
+                    if !(0..8).contains(&r) || !(0..8).contains(&c) {
+                        break;
+                    }
+                    let bit = 1u64 << (r * 8 + c) as usize;
+
+                    if !jumped {
+                        if (occupied & bit) != 0 {
+                            if (opponent & bit) != 0 {
+                                jumped = true;
+                            } else {
+                                break; // own piece blocks this ray
+                            }
+                        }
+                    } else {
+                        if (occupied & bit) != 0 {
+                            break; // blocked past the jumped piece
+                        }
+                        moves.push(Move {
+                            from_row: row,
+                            from_col: col,
+                            to_row: r,
+                            to_col: c,
+                        });
+                    }
+                    step += 1;
+                }
+            } else {
+                let mid_r = row + dr;
+                let mid_c = col + dc;
+                let to_r = row + dr * 2;
+                let to_c = col + dc * 2;
+                if (0..8).contains(&to_r) && (0..8).contains(&to_c) {
+                    let mid_bit = 1u64 << (mid_r * 8 + mid_c) as usize;
+                    let to_bit = 1u64 << (to_r * 8 + to_c) as usize;
+                    if (opponent & mid_bit) != 0 && (occupied & to_bit) == 0 {
+                        moves.push(Move {
+                            from_row: row,
+                            from_col: col,
+                            to_row: to_r,
+                            to_col: to_c,
+                        });
+                    }
+                }
+            }
+        }
+        moves
+    }
+
+    fn generate_all_slides(&self, mover: Player) -> Vec<Move> {
+        let occupied = self.p1_pieces | self.p2_pieces;
+        let mut moves = Vec::new();
+        let mut bb = self.owner_bits(mover);
+
+        while bb != 0 {
+            let idx = bb.trailing_zeros() as i32;
+            let row = idx / 8;
+            let col = idx % 8;
+            let from_bit = 1u64 << idx;
+            let is_dama = (self.dama_pieces & from_bit) != 0;
+
+            if is_dama {
+                for &(dr, dc) in &[(-1, -1), (-1, 1), (1, -1), (1, 1)] {
+                    let mut step = 1;
+                    loop {
+                        let r = row + dr * step;
+                        let c = col + dc * step;
+                        if !(0..8).contains(&r) || !(0..8).contains(&c) {
+                            break;
+                        }
+                        if (occupied & (1u64 << (r * 8 + c) as usize)) != 0 {
+                            break;
+                        }
+                        moves.push(Move {
+                            from_row: row,
+                            from_col: col,
+                            to_row: r,
+                            to_col: c,
+                        });
+                        step += 1;
+                    }
+                }
+            } else {
+                let dr = if mover == Player::Player1 { 1 } else { -1 };
+                for &dc in &[-1, 1] {
+                    let r = row + dr;
+                    let c = col + dc;
+                    if (0..8).contains(&r) && (0..8).contains(&c) {
+                        if (occupied & (1u64 << (r * 8 + c) as usize)) == 0 {
+                            moves.push(Move {
+                                from_row: row,
+                                from_col: col,
+                                to_row: r,
+                                to_col: c,
+                            });
+                        }
+                    }
+                }
+            }
+            bb &= bb - 1;
+        }
+        moves
+    }
+
+    pub fn generate_moves_for(&self, player: Player) -> usize {
+        if self.player_has_any_capture(player) {
+            self.generate_all_captures(player).len()
+        } else {
+            self.generate_all_slides(player).len()
+        }
     }
 
     pub fn make_move(
