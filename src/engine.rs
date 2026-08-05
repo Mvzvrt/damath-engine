@@ -1,26 +1,19 @@
 use crate::board::{Board, Move};
 use crate::piece::Player;
 use std::collections::HashMap;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant};
-
-// ---------------------------------------------------------------------
-// Evaluation weights (HCE) — score is intentionally dominant since it's
-// the actual win condition; the rest are tie-breaking heuristics.
-// ---------------------------------------------------------------------
 
 const SCORE_WEIGHT: i32 = 100;
 const MATERIAL_WEIGHT: i32 = 1;
 const MOBILITY_WEIGHT: i32 = 3;
 const DAMA_WEIGHT: i32 = 15;
+const ADVANCEMENT_WEIGHT: i32 = 2;
+const CENTRALIZATION_WEIGHT: i32 = 1;
+const TEMPO_BONUS: i32 = 5;
 
 const MATE_VALUE: i32 = 1_000_000;
 const INF: i32 = i32::MAX - 1;
-
-// ---------------------------------------------------------------------
-// Transposition table
-// ---------------------------------------------------------------------
+const NULL_MOVE_REDUCTION: u32 = 2;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 enum Bound {
@@ -37,12 +30,10 @@ struct TTEntry {
     best_move: Option<Move>,
 }
 
-// ---------------------------------------------------------------------
-// Search
-// ---------------------------------------------------------------------
-
 pub struct Search {
     tt: HashMap<u64, TTEntry>,
+    killers: [[Option<Move>; 2]; 128],
+    search_path: Vec<u64>,
     nodes: u64,
     start_time: Instant,
     time_limit: Duration,
@@ -53,11 +44,23 @@ impl Search {
     pub fn new() -> Self {
         Self {
             tt: HashMap::new(),
+            killers: [[None; 2]; 128],
+            search_path: Vec::new(),
             nodes: 0,
             start_time: Instant::now(),
             time_limit: Duration::from_millis(0),
             stop: false,
         }
+    }
+
+    /// Clears all persistent search state. Not needed between `analyze`
+    /// calls on the same game — the TT stays valid across the whole
+    /// game since a position is a position regardless of move order.
+    /// Call this only when starting a genuinely new game.
+    pub fn reset(&mut self) {
+        self.tt.clear();
+        self.killers = [[None; 2]; 128];
+        self.search_path.clear();
     }
 
     pub fn find_best_move(
@@ -69,7 +72,9 @@ impl Search {
         self.start_time = Instant::now();
         self.time_limit = Duration::from_millis(time_limit_ms);
         self.nodes = 0;
-        self.tt.clear();
+        // Deliberately NOT clearing `tt`/`killers` here: persisting them
+        // across calls means repeated `analyze` invocations on the same
+        // or a nearby position converge faster instead of starting over.
 
         let mut best_overall: Option<(Move, i32)> = None;
 
@@ -107,8 +112,11 @@ impl Search {
             return None;
         }
 
-        let hash = hash_board(board);
-        let ordered = self.order_moves(board, moves, hash);
+        self.search_path.clear();
+        self.search_path.push(board.zobrist);
+
+        let key = tt_key(board);
+        let ordered = self.order_moves(board, moves, key, 0);
 
         let mut alpha = -INF;
         let beta = INF;
@@ -117,10 +125,18 @@ impl Search {
 
         for mv in ordered {
             if let Ok(undo) = board.make_move(mv.from_row, mv.from_col, mv.to_row, mv.to_col) {
-                let score = if undo.turn_switched {
-                    -self.negamax(board, depth - 1, -beta, -alpha, 1)
+                let is_repetition = self.search_path.contains(&board.zobrist);
+                let score = if is_repetition {
+                    0
                 } else {
-                    self.negamax(board, depth, alpha, beta, 1)
+                    self.search_path.push(board.zobrist);
+                    let s = if undo.turn_switched {
+                        -self.negamax(board, depth - 1, -beta, -alpha, 1)
+                    } else {
+                        self.negamax(board, depth, alpha, beta, 1)
+                    };
+                    self.search_path.pop();
+                    s
                 };
                 board.unmake_move(undo);
 
@@ -159,9 +175,9 @@ impl Search {
         }
 
         let alpha_orig = alpha;
-        let hash = hash_board(board);
+        let key = tt_key(board);
 
-        if let Some(entry) = self.tt.get(&hash) {
+        if let Some(entry) = self.tt.get(&key) {
             if entry.depth >= depth {
                 match entry.bound {
                     Bound::Exact => return entry.score,
@@ -183,16 +199,46 @@ impl Search {
             return self.quiescence(board, alpha, beta);
         }
 
-        let ordered = self.order_moves(board, moves, hash);
+        // Null-move pruning: only in genuinely quiet positions. Captures
+        // are mandatory in this game, so "passing" only makes sense to
+        // simulate when no capture is actually forced right now.
+        if depth >= 3
+            && board.forced_piece.is_none()
+            && !board.player_has_any_capture(board.current_turn)
+            && beta < MATE_VALUE - 1000
+            && beta > -(MATE_VALUE - 1000)
+        {
+            board.switch_turn();
+            let null_score =
+                -self.negamax(board, depth - 1 - NULL_MOVE_REDUCTION, -beta, -beta + 1, ply + 1);
+            board.switch_turn();
+
+            if self.stop {
+                return 0;
+            }
+            if null_score >= beta {
+                return beta;
+            }
+        }
+
+        let ordered = self.order_moves(board, moves, key, ply);
         let mut best_score = -INF;
         let mut best_move = None;
 
         for mv in ordered {
             if let Ok(undo) = board.make_move(mv.from_row, mv.from_col, mv.to_row, mv.to_col) {
-                let score = if undo.turn_switched {
-                    -self.negamax(board, depth - 1, -beta, -alpha, ply + 1)
+                let is_repetition = self.search_path.contains(&board.zobrist);
+                let score = if is_repetition {
+                    0
                 } else {
-                    self.negamax(board, depth, alpha, beta, ply + 1)
+                    self.search_path.push(board.zobrist);
+                    let s = if undo.turn_switched {
+                        -self.negamax(board, depth - 1, -beta, -alpha, ply + 1)
+                    } else {
+                        self.negamax(board, depth, alpha, beta, ply + 1)
+                    };
+                    self.search_path.pop();
+                    s
                 };
                 board.unmake_move(undo);
 
@@ -208,6 +254,9 @@ impl Search {
                     alpha = best_score;
                 }
                 if alpha >= beta {
+                    if !mv.is_capture() {
+                        self.store_killer(ply, mv);
+                    }
                     break;
                 }
             }
@@ -222,7 +271,7 @@ impl Search {
         };
 
         self.tt.insert(
-            hash,
+            key,
             TTEntry {
                 depth,
                 score: best_score,
@@ -284,30 +333,40 @@ impl Search {
         best
     }
 
-    fn order_moves(&self, board: &Board, mut moves: Vec<Move>, hash: u64) -> Vec<Move> {
-        let tt_best = self.tt.get(&hash).and_then(|e| e.best_move);
+    fn store_killer(&mut self, ply: u32, mv: Move) {
+        let idx = (ply as usize) % self.killers.len();
+        if self.killers[idx][0] != Some(mv) {
+            self.killers[idx][1] = self.killers[idx][0];
+            self.killers[idx][0] = Some(mv);
+        }
+    }
+
+    fn order_moves(&self, board: &Board, mut moves: Vec<Move>, key: u64, ply: u32) -> Vec<Move> {
+        let tt_best = self.tt.get(&key).and_then(|e| e.best_move);
+        let killer_idx = (ply as usize) % self.killers.len();
+        let killers = self.killers[killer_idx];
 
         moves.sort_by_key(|mv| {
-            let mut key = 0i32;
+            let mut order_key = 0i32;
             if let Some(best) = tt_best {
                 if *mv == best {
-                    key -= 10_000_000;
+                    order_key -= 10_000_000;
                 }
             }
             if mv.is_capture() {
-                key -= 1_000_000 + estimate_capture_value(board, mv);
+                order_key -= 1_000_000 + estimate_capture_value(board, mv);
+            } else if Some(*mv) == killers[0] {
+                order_key -= 500_000;
+            } else if Some(*mv) == killers[1] {
+                order_key -= 400_000;
             }
-            key
+            order_key
         });
 
         moves
     }
 }
 
-/// Cheap heuristic used only for move ordering, not applied to the board:
-/// finds the jumped piece along the diagonal and estimates the resulting
-/// score using the landing square's operator. Lives in the engine (not
-/// board.rs) because it's a search heuristic, not a game rule.
 fn estimate_capture_value(board: &Board, mv: &Move) -> i32 {
     let step_r = (mv.to_row - mv.from_row).signum();
     let step_c = (mv.to_col - mv.from_col).signum();
@@ -330,15 +389,14 @@ fn estimate_capture_value(board: &Board, mv: &Move) -> i32 {
     0
 }
 
-// ---------------------------------------------------------------------
-// Evaluation (HCE)
-// ---------------------------------------------------------------------
-
+/// Score-dominant HCE, from `board.current_turn`'s perspective.
 pub fn evaluate(board: &Board) -> i32 {
     let score_diff = board.p1_score - board.p2_score;
 
     let mut material = 0i32;
     let mut dama_diff = 0i32;
+    let mut advancement = 0i32;
+    let mut centralization = 0i32;
 
     for idx in 0..64 {
         if let Some(chip) = board.chips[idx] {
@@ -346,24 +404,37 @@ pub fn evaluate(board: &Board) -> i32 {
             let is_p1 = (board.p1_pieces & bit) != 0;
             let sign = if is_p1 { 1 } else { -1 };
             material += sign * chip.value;
-            if (board.dama_pieces & bit) != 0 {
+
+            let row = (idx / 8) as i32;
+            let col = (idx % 8) as i32;
+            let is_dama = (board.dama_pieces & bit) != 0;
+
+            if is_dama {
                 dama_diff += sign;
+                let center_dist = (row - 3).abs() + (col - 3).abs();
+                centralization += sign * (6 - center_dist).max(0);
+            } else {
+                let progress = if is_p1 { row } else { 7 - row };
+                advancement += sign * progress;
             }
         }
     }
 
-    // Mobility uses generate_moves() from board.rs's perspective, so
-    // temporarily flip current_turn is NOT an option here (no &mut).
-    // Instead we approximate via a lightweight clone of just what we
-    // need — see note below on this simplification.
     let p1_moves = board.generate_moves_for(Player::Player1);
     let p2_moves = board.generate_moves_for(Player::Player2);
     let mobility_diff = p1_moves as i32 - p2_moves as i32;
 
-    let raw = SCORE_WEIGHT * score_diff
+    let mut raw = SCORE_WEIGHT * score_diff
         + MATERIAL_WEIGHT * material
         + MOBILITY_WEIGHT * mobility_diff
-        + DAMA_WEIGHT * dama_diff;
+        + DAMA_WEIGHT * dama_diff
+        + ADVANCEMENT_WEIGHT * advancement
+        + CENTRALIZATION_WEIGHT * centralization;
+
+    raw += match board.current_turn {
+        Player::Player1 => TEMPO_BONUS,
+        Player::Player2 => -TEMPO_BONUS,
+    };
 
     match board.current_turn {
         Player::Player1 => raw,
@@ -371,24 +442,16 @@ pub fn evaluate(board: &Board) -> i32 {
     }
 }
 
-fn hash_board(board: &Board) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    board.p1_pieces.hash(&mut hasher);
-    board.p2_pieces.hash(&mut hasher);
-    board.dama_pieces.hash(&mut hasher);
+fn tt_key(board: &Board) -> u64 {
+    board.zobrist ^ mix_scores(board.p1_score, board.p2_score)
+}
 
-    let turn_code: u8 = match board.current_turn {
-        Player::Player1 => 0,
-        Player::Player2 => 1,
-    };
-    turn_code.hash(&mut hasher);
-
-    for idx in 0..64u8 {
-        if let Some(chip) = board.chips[idx as usize] {
-            (idx, chip.value).hash(&mut hasher);
-        }
-    }
-
-    board.forced_piece.hash(&mut hasher);
-    hasher.finish()
+fn mix_scores(p1_score: i32, p2_score: i32) -> u64 {
+    let mut x = ((p1_score as i64 as u64) << 32) ^ (p2_score as i64 as u64 & 0xFFFF_FFFF);
+    x ^= x >> 30;
+    x = x.wrapping_mul(0xBF58476D1CE4E5B9);
+    x ^= x >> 27;
+    x = x.wrapping_mul(0x94D049BB133111EB);
+    x ^= x >> 31;
+    x
 }

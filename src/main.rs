@@ -3,6 +3,7 @@ mod engine;
 mod operator;
 mod piece;
 mod undo;
+mod zobrist;
 
 use board::Board;
 use engine::Search;
@@ -12,8 +13,9 @@ fn main() {
     let mut board = Board::new();
     let mut search = Search::new();
     let mut info_message = String::from(
-        "Game started. Enter moves as: from_row from_col to_row to_col (e.g., 2 1 3 2). \
-         Type 'ai' for the engine to move, 'eval' to see the static evaluation, or 'quit' to exit.",
+        "Game started. Enter moves as: from_row from_col to_row to_col. \
+         'ai' lets the engine move, 'analyze' shows live search scores \
+         without moving, 'newgame' resets everything, or 'quit'.",
     );
 
     loop {
@@ -26,7 +28,7 @@ fn main() {
         println!("Info: {}", info_message);
         println!("-------------------------------------------------------");
 
-        print!("Move (or 'ai' / 'eval' / 'quit'): ");
+        print!("Move (or 'ai' / 'analyze' / 'newgame' / 'quit'): ");
         io::stdout().flush().unwrap();
 
         let mut input = String::new();
@@ -42,29 +44,48 @@ fn main() {
             break;
         }
 
-        if input.eq_ignore_ascii_case("eval") {
-            let score = engine::evaluate(&board);
-            info_message = format!(
-                "Static eval (from {:?}'s perspective): {}",
-                board.current_turn, score
-            );
+        if input.eq_ignore_ascii_case("newgame") {
+            board = Board::new();
+            search.reset();
+            info_message = String::from("New game started, search state cleared.");
+            continue;
+        }
+
+        if input.eq_ignore_ascii_case("analyze") {
+            print!("\x1B[2J\x1B[1;1H");
+            board.display();
+            println!("Analyzing (depth up to 24, 8s budget)...\n");
+
+            match search.find_best_move(&mut board, 24, 8000) {
+                Some((mv, score)) => {
+                    info_message = format!(
+                        "Analysis complete. Best line starts ({}, {}) -> ({}, {}), score {}. \
+                         (Not played — enter a move manually or type 'ai'.)",
+                        mv.from_row, mv.from_col, mv.to_row, mv.to_col, score
+                    );
+                }
+                None => {
+                    info_message = String::from("Analysis found no legal moves (game over?).");
+                }
+            }
+
+            println!("\nPress Enter to continue...");
+            let mut _pause = String::new();
+            io::stdin().read_line(&mut _pause).ok();
             continue;
         }
 
         if input.eq_ignore_ascii_case("ai") {
-            match search.find_best_move(&mut board, 6, 3000) {
+            match search.find_best_move(&mut board, 20, 4000) {
                 Some((mv, score)) => {
                     match board.make_move(mv.from_row, mv.from_col, mv.to_row, mv.to_col) {
                         Ok(_) => {
                             info_message = format!(
-                                "Engine played ({}, {}) -> ({}, {}) [eval {}]",
+                                "Engine played ({}, {}) -> ({}, {}) [searched score {}]",
                                 mv.from_row, mv.from_col, mv.to_row, mv.to_col, score
                             );
                         }
                         Err(err) => {
-                            // Should not normally happen: it would mean
-                            // engine's generated move disagreed with
-                            // make_move's own validation.
                             info_message =
                                 format!("Engine move was rejected by make_move: {}", err);
                         }
@@ -84,7 +105,7 @@ fn main() {
 
         if parts.len() != 4 {
             info_message = String::from(
-                "Invalid format! Enter 4 numbers separated by spaces (e.g. 2 1 3 2), or 'ai'/'eval'/'quit'.",
+                "Invalid format! Enter 4 numbers separated by spaces (e.g. 2 1 3 2), or 'ai'/'analyze'/'newgame'/'quit'.",
             );
             continue;
         }

@@ -1,6 +1,7 @@
 use crate::operator::Operator;
 use crate::piece::{Chip, Player};
 use crate::undo::{CaptureUndo, Undo};
+use crate::zobrist;
 
 const FILE_A: u64 = 0x0101010101010101; // col 0
 const FILE_H: u64 = 0x8080808080808080; // col 7
@@ -8,19 +9,19 @@ const FILE_H: u64 = 0x8080808080808080; // col 7
 #[inline(always)]
 fn shift_nw(bb: u64) -> u64 {
     (bb & !FILE_A) << 7
-} // row+1, col-1
+}
 #[inline(always)]
 fn shift_ne(bb: u64) -> u64 {
     (bb & !FILE_H) << 9
-} // row+1, col+1
+}
 #[inline(always)]
 fn shift_sw(bb: u64) -> u64 {
     (bb & !FILE_A) >> 9
-} // row-1, col-1
+}
 #[inline(always)]
 fn shift_se(bb: u64) -> u64 {
     (bb & !FILE_H) >> 7
-} // row-1, col+1
+}
 
 const SHIFTS: [fn(u64) -> u64; 4] = [shift_nw, shift_ne, shift_sw, shift_se];
 
@@ -48,6 +49,7 @@ pub struct Board {
     pub chips: [Option<Chip>; 64],
     pub current_turn: Player,
     pub forced_piece: Option<(usize, usize)>,
+    pub zobrist: u64,
 }
 
 impl Board {
@@ -65,11 +67,40 @@ impl Board {
             operators: [None; 64],
             current_turn: Player::Player1,
             forced_piece: None,
+            zobrist: 0,
         };
 
         board.init_operators();
         board.init_integer_chips();
+        board.zobrist = board.compute_zobrist_from_scratch();
         board
+    }
+
+    /// Full recompute of the Zobrist hash from board state. Only ever
+    /// called once, at construction — every other update is incremental.
+    fn compute_zobrist_from_scratch(&self) -> u64 {
+        let tables = zobrist::tables();
+        let mut hash = 0u64;
+
+        for idx in 0..64 {
+            if let Some(chip) = self.chips[idx] {
+                let bit = 1u64 << idx;
+                let is_p1 = (self.p1_pieces & bit) != 0;
+                let player = if is_p1 { Player::Player1 } else { Player::Player2 };
+                let is_dama = (self.dama_pieces & bit) != 0;
+                hash ^= tables.piece_key(idx, player, is_dama, chip.value);
+            }
+        }
+
+        if self.current_turn == Player::Player2 {
+            hash ^= tables.side_key;
+        }
+
+        if let Some((r, c)) = self.forced_piece {
+            hash ^= tables.forced_key(r * 8 + c);
+        }
+
+        hash
     }
 
     pub fn display(&self) {
@@ -81,12 +112,14 @@ impl Board {
         let bottom_border = "   └─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘  ";
         let gap = "   ";
 
-        println!("{}{}{}", "                        BOARD", gap, "                                                OPERATORS");
+        const DARK_BG: &str = "\x1b[100m";
+        const RESET: &str = "\x1b[0m";
+
+        println!("{}{}{}", "   BOARD", gap, "   OPERATORS");
         println!("{}{}{}", col_header, gap, col_header);
         println!("{}{}{}", top_border, gap, top_border);
 
         for row in (0..8).rev() {
-            // --- main board row ---
             let mut main_line = format!(" {} │", row);
             let mut op_line = format!(" {} │", row);
 
@@ -95,38 +128,28 @@ impl Board {
                 let bit = 1u64 << idx;
                 let playable = self.operators[idx].is_some();
 
-                // main board cell
                 if !playable {
-                    main_line += "\x1b[100m     \x1b[0m│";
+                    main_line += &format!("{}     {}│", DARK_BG, RESET);
                 } else {
                     match self.chips[idx] {
                         Some(ref chip) => {
-                            let symbol = if (self.p1_pieces & bit) != 0 {
-                                'A'
-                            } else {
-                                'B'
-                            };
-                            let dama_flag = if (self.dama_pieces & bit) != 0 {
-                                'D'
-                            } else {
-                                ' '
-                            };
+                            let symbol = if (self.p1_pieces & bit) != 0 { 'A' } else { 'B' };
+                            let dama_flag = if (self.dama_pieces & bit) != 0 { 'D' } else { ' ' };
                             main_line += &format!("{}{}{:>3}│", symbol, dama_flag, chip.value);
                         }
                         None => main_line += "     │",
                     }
                 }
 
-                // operator board cell
                 if !playable {
-                    op_line += "\x1b[100m     \x1b[0m│";
+                    op_line += &format!("{}     {}│", DARK_BG, RESET);
                 } else {
                     let symbol = match self.operators[idx] {
                         Some(Operator::Add) => '+',
                         Some(Operator::Sub) => '-',
                         Some(Operator::Mul) => 'x',
                         Some(Operator::Div) => '÷',
-                        None => ' ', // unreachable given the `playable` check, but safe fallback
+                        None => ' ',
                     };
                     op_line += &format!("  {}  │", symbol);
                 }
@@ -188,11 +211,7 @@ impl Board {
 
         let is_dama = (self.dama_pieces & piece_bit) != 0;
         let is_p1 = (self.p1_pieces & piece_bit) != 0;
-        let opponent_pieces = if is_p1 {
-            self.p2_pieces
-        } else {
-            self.p1_pieces
-        };
+        let opponent_pieces = if is_p1 { self.p2_pieces } else { self.p1_pieces };
         let occupied = self.p1_pieces | self.p2_pieces;
 
         if is_dama {
@@ -240,6 +259,9 @@ impl Board {
         false
     }
 
+    /// Generates all legal moves for `self.current_turn`, respecting
+    /// mandatory-capture and chain rules. Single source of truth for
+    /// move shape — `make_move` re-validates independently.
     pub fn generate_moves(&self) -> Vec<Move> {
         let mover = self.current_turn;
 
@@ -252,6 +274,16 @@ impl Board {
         }
 
         self.generate_all_slides(mover)
+    }
+
+    /// Move count for `player`, independent of whose turn it actually is.
+    /// Used by evaluation for a mobility heuristic — not a legality check.
+    pub fn generate_moves_for(&self, player: Player) -> usize {
+        if self.player_has_any_capture(player) {
+            self.generate_all_captures(player).len()
+        } else {
+            self.generate_all_slides(player).len()
+        }
     }
 
     fn owner_bits(&self, player: Player) -> u64 {
@@ -277,11 +309,7 @@ impl Board {
         let from_bit = 1u64 << from_idx;
         let is_dama = (self.dama_pieces & from_bit) != 0;
         let is_p1 = (self.p1_pieces & from_bit) != 0;
-        let opponent = if is_p1 {
-            self.p2_pieces
-        } else {
-            self.p1_pieces
-        };
+        let opponent = if is_p1 { self.p2_pieces } else { self.p1_pieces };
         let occupied = self.p1_pieces | self.p2_pieces;
 
         let mut moves = Vec::new();
@@ -304,19 +332,14 @@ impl Board {
                             if (opponent & bit) != 0 {
                                 jumped = true;
                             } else {
-                                break; // own piece blocks this ray
+                                break;
                             }
                         }
                     } else {
                         if (occupied & bit) != 0 {
-                            break; // blocked past the jumped piece
+                            break;
                         }
-                        moves.push(Move {
-                            from_row: row,
-                            from_col: col,
-                            to_row: r,
-                            to_col: c,
-                        });
+                        moves.push(Move { from_row: row, from_col: col, to_row: r, to_col: c });
                     }
                     step += 1;
                 }
@@ -329,12 +352,7 @@ impl Board {
                     let mid_bit = 1u64 << (mid_r * 8 + mid_c) as usize;
                     let to_bit = 1u64 << (to_r * 8 + to_c) as usize;
                     if (opponent & mid_bit) != 0 && (occupied & to_bit) == 0 {
-                        moves.push(Move {
-                            from_row: row,
-                            from_col: col,
-                            to_row: to_r,
-                            to_col: to_c,
-                        });
+                        moves.push(Move { from_row: row, from_col: col, to_row: to_r, to_col: to_c });
                     }
                 }
             }
@@ -366,12 +384,7 @@ impl Board {
                         if (occupied & (1u64 << (r * 8 + c) as usize)) != 0 {
                             break;
                         }
-                        moves.push(Move {
-                            from_row: row,
-                            from_col: col,
-                            to_row: r,
-                            to_col: c,
-                        });
+                        moves.push(Move { from_row: row, from_col: col, to_row: r, to_col: c });
                         step += 1;
                     }
                 }
@@ -382,12 +395,7 @@ impl Board {
                     let c = col + dc;
                     if (0..8).contains(&r) && (0..8).contains(&c) {
                         if (occupied & (1u64 << (r * 8 + c) as usize)) == 0 {
-                            moves.push(Move {
-                                from_row: row,
-                                from_col: col,
-                                to_row: r,
-                                to_col: c,
-                            });
+                            moves.push(Move { from_row: row, from_col: col, to_row: r, to_col: c });
                         }
                     }
                 }
@@ -395,14 +403,6 @@ impl Board {
             bb &= bb - 1;
         }
         moves
-    }
-
-    pub fn generate_moves_for(&self, player: Player) -> usize {
-        if self.player_has_any_capture(player) {
-            self.generate_all_captures(player).len()
-        } else {
-            self.generate_all_slides(player).len()
-        }
     }
 
     pub fn make_move(
@@ -476,6 +476,7 @@ impl Board {
         let prev_forced_piece = self.forced_piece;
         let mover = self.current_turn;
 
+        // 1. SIMPLE SLIDE MOVE
         if dist == 1 || (dist > 1 && is_dama && !self.piece_has_any_capture(from_row, from_col)) {
             if dist == 1 {
                 if self.forced_piece.is_some() {
@@ -499,7 +500,7 @@ impl Board {
                 self.move_chip_data(from_idx, to_idx);
                 let promoted = self.check_promotion(to_row, to_idx);
                 self.switch_turn();
-                self.forced_piece = None;
+                self.set_forced_piece(None);
 
                 return Ok(Undo {
                     from_idx,
@@ -533,6 +534,7 @@ impl Board {
             }
         }
 
+        // 2. CAPTURE MOVE
         let mut found_jumped = None;
         let mut curr_r = from_row + step_r;
         let mut curr_c = from_col + step_c;
@@ -594,6 +596,12 @@ impl Board {
             Player::Player2 => self.p2_score += points,
         }
 
+        self.zobrist ^= zobrist::tables().piece_key(
+            jumped_idx,
+            enemy_player,
+            jumped_was_dama,
+            jumped_chip.value,
+        );
         self.chips[jumped_idx] = None;
         self.clear_bit(jumped_idx, enemy_player);
         self.move_chip_data(from_idx, to_idx);
@@ -608,10 +616,10 @@ impl Board {
         });
 
         let turn_switched = if self.piece_has_any_capture(to_row, to_col) {
-            self.forced_piece = Some((to_row as usize, to_col as usize));
+            self.set_forced_piece(Some((to_row as usize, to_col as usize)));
             false
         } else {
-            self.forced_piece = None;
+            self.set_forced_piece(None);
             self.switch_turn();
             true
         };
@@ -630,13 +638,24 @@ impl Board {
     }
 
     pub fn unmake_move(&mut self, undo: Undo) {
+        let tables = zobrist::tables();
+
         if undo.turn_switched {
             self.current_turn = undo.mover;
+            self.zobrist ^= tables.side_key;
         }
-        self.forced_piece = undo.prev_forced_piece;
+        self.set_forced_piece(undo.prev_forced_piece);
 
         if undo.promoted {
-            self.dama_pieces &= !(1u64 << undo.to_idx);
+            let bit = 1u64 << undo.to_idx;
+            let is_p1 = (self.p1_pieces & bit) != 0;
+            let player = if is_p1 { Player::Player1 } else { Player::Player2 };
+            let value = self.chips[undo.to_idx]
+                .map(|c| c.value)
+                .unwrap_or(undo.moved_chip.value);
+            self.zobrist ^= tables.piece_key(undo.to_idx, player, true, value);
+            self.dama_pieces &= !bit;
+            self.zobrist ^= tables.piece_key(undo.to_idx, player, false, value);
         }
 
         self.move_chip_data(undo.to_idx, undo.from_idx);
@@ -651,6 +670,12 @@ impl Board {
             if cap.jumped_was_dama {
                 self.dama_pieces |= bit;
             }
+            self.zobrist ^= tables.piece_key(
+                cap.jumped_idx,
+                cap.jumped_player,
+                cap.jumped_was_dama,
+                cap.jumped_chip.value,
+            );
 
             match undo.mover {
                 Player::Player1 => self.p1_score -= cap.points_awarded,
@@ -679,29 +704,43 @@ impl Board {
     }
 
     fn check_promotion(&mut self, row: i32, idx: usize) -> bool {
-        if self.chips[idx].is_none() {
-            return false;
-        }
+        let chip = match self.chips[idx] {
+            Some(c) => c,
+            None => return false,
+        };
         let bit = 1u64 << idx;
         if (self.dama_pieces & bit) != 0 {
-            return false; // already dama
+            return false;
         }
         let is_p1 = (self.p1_pieces & bit) != 0;
         if (is_p1 && row == 7) || (!is_p1 && row == 0) {
+            let player = if is_p1 { Player::Player1 } else { Player::Player2 };
+            let tables = zobrist::tables();
+            self.zobrist ^= tables.piece_key(idx, player, false, chip.value);
             self.dama_pieces |= bit;
+            self.zobrist ^= tables.piece_key(idx, player, true, chip.value);
             return true;
         }
         false
     }
 
     fn move_chip_data(&mut self, from_idx: usize, to_idx: usize) {
-        let chip = self.chips[from_idx].take();
-        self.chips[to_idx] = chip;
+        let chip = self.chips[from_idx]
+            .take()
+            .expect("move_chip_data called with empty source square");
 
         let from_bit = 1u64 << from_idx;
         let to_bit = 1u64 << to_idx;
+        let is_p1 = (self.p1_pieces & from_bit) != 0;
+        let player = if is_p1 { Player::Player1 } else { Player::Player2 };
+        let was_dama = (self.dama_pieces & from_bit) != 0;
 
-        if (self.p1_pieces & from_bit) != 0 {
+        let tables = zobrist::tables();
+        self.zobrist ^= tables.piece_key(from_idx, player, was_dama, chip.value);
+
+        self.chips[to_idx] = Some(chip);
+
+        if is_p1 {
             self.p1_pieces &= !from_bit;
             self.p1_pieces |= to_bit;
         } else {
@@ -709,14 +748,31 @@ impl Board {
             self.p2_pieces |= to_bit;
         }
 
-        if (self.dama_pieces & from_bit) != 0 {
+        if was_dama {
             self.dama_pieces &= !from_bit;
             self.dama_pieces |= to_bit;
         }
+
+        self.zobrist ^= tables.piece_key(to_idx, player, was_dama, chip.value);
     }
 
-    fn switch_turn(&mut self) {
+    /// Toggles whose turn it is, keeping the hash in sync. `pub(crate)`
+    /// because the engine's null-move pruning also needs this — always
+    /// paired with a second call to undo it there.
+    pub(crate) fn switch_turn(&mut self) {
         self.current_turn = self.current_turn.opponent();
+        self.zobrist ^= zobrist::tables().side_key;
+    }
+
+    fn set_forced_piece(&mut self, new: Option<(usize, usize)>) {
+        let tables = zobrist::tables();
+        if let Some((r, c)) = self.forced_piece {
+            self.zobrist ^= tables.forced_key(r * 8 + c);
+        }
+        self.forced_piece = new;
+        if let Some((r, c)) = self.forced_piece {
+            self.zobrist ^= tables.forced_key(r * 8 + c);
+        }
     }
 
     fn clear_bit(&mut self, idx: usize, player: Player) {
@@ -730,36 +786,18 @@ impl Board {
 
     fn init_integer_chips(&mut self) {
         let p1_layout = [
-            (0, 1, -11),
-            (0, 3, 8),
-            (0, 5, -5),
-            (0, 7, 2),
-            (1, 0, 0),
-            (1, 2, -3),
-            (1, 4, 10),
-            (1, 6, -7),
-            (2, 1, -9),
-            (2, 3, 6),
-            (2, 5, -1),
-            (2, 7, 4),
+            (0, 1, -11), (0, 3, 8), (0, 5, -5), (0, 7, 2),
+            (1, 0, 0), (1, 2, -3), (1, 4, 10), (1, 6, -7),
+            (2, 1, -9), (2, 3, 6), (2, 5, -1), (2, 7, 4),
         ];
         for &(row, col, val) in &p1_layout {
             self.chips[row * 8 + col] = Some(Chip::new(val));
         }
 
         let p2_layout = [
-            (5, 0, 4),
-            (5, 2, -1),
-            (5, 4, 6),
-            (5, 6, -9),
-            (6, 1, -7),
-            (6, 3, 10),
-            (6, 5, -3),
-            (6, 7, 0),
-            (7, 0, 2),
-            (7, 2, -5),
-            (7, 4, 8),
-            (7, 6, -11),
+            (5, 0, 4), (5, 2, -1), (5, 4, 6), (5, 6, -9),
+            (6, 1, -7), (6, 3, 10), (6, 5, -3), (6, 7, 0),
+            (7, 0, 2), (7, 2, -5), (7, 4, 8), (7, 6, -11),
         ];
         for &(row, col, val) in &p2_layout {
             self.chips[row * 8 + col] = Some(Chip::new(val));
@@ -771,34 +809,10 @@ impl Board {
             for col in 0..8 {
                 let idx = row * 8 + col;
                 let op = match row {
-                    0 | 4 => match col {
-                        1 => Some(Operator::Add),
-                        3 => Some(Operator::Sub),
-                        5 => Some(Operator::Div),
-                        7 => Some(Operator::Mul),
-                        _ => None,
-                    },
-                    1 | 5 => match col {
-                        0 => Some(Operator::Sub),
-                        2 => Some(Operator::Add),
-                        4 => Some(Operator::Mul),
-                        6 => Some(Operator::Div),
-                        _ => None,
-                    },
-                    2 | 6 => match col {
-                        1 => Some(Operator::Div),
-                        3 => Some(Operator::Mul),
-                        5 => Some(Operator::Add),
-                        7 => Some(Operator::Sub),
-                        _ => None,
-                    },
-                    3 | 7 => match col {
-                        0 => Some(Operator::Mul),
-                        2 => Some(Operator::Div),
-                        4 => Some(Operator::Sub),
-                        6 => Some(Operator::Add),
-                        _ => None,
-                    },
+                    0 | 4 => match col { 1 => Some(Operator::Add), 3 => Some(Operator::Sub), 5 => Some(Operator::Div), 7 => Some(Operator::Mul), _ => None },
+                    1 | 5 => match col { 0 => Some(Operator::Sub), 2 => Some(Operator::Add), 4 => Some(Operator::Mul), 6 => Some(Operator::Div), _ => None },
+                    2 | 6 => match col { 1 => Some(Operator::Div), 3 => Some(Operator::Mul), 5 => Some(Operator::Add), 7 => Some(Operator::Sub), _ => None },
+                    3 | 7 => match col { 0 => Some(Operator::Mul), 2 => Some(Operator::Div), 4 => Some(Operator::Sub), 6 => Some(Operator::Add), _ => None },
                     _ => None,
                 };
                 self.operators[idx] = op;
