@@ -1,6 +1,7 @@
 mod board;
 mod operator;
 mod piece;
+mod undo;
 
 use board::Board;
 use std::io::{self, Write};
@@ -53,7 +54,7 @@ fn main() {
         let to_col = parts[3];
 
         match board.make_move(from_row, from_col, to_row, to_col) {
-            Ok(()) => {
+            Ok(_) => {
                 info_message = format!(
                     "Successfully moved from ({}, {}) to ({}, {}).",
                     from_row, from_col, to_row, to_col
