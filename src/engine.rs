@@ -260,8 +260,13 @@ impl Search {
             && beta > -(MATE_VALUE - 1000)
         {
             board.switch_turn();
-            let null_score =
-                -self.negamax(board, depth - 1 - NULL_MOVE_REDUCTION, -beta, -beta + 1, ply + 1);
+            let null_score = -self.negamax(
+                board,
+                depth - 1 - NULL_MOVE_REDUCTION,
+                -beta,
+                -beta + 1,
+                ply + 1,
+            );
             board.switch_turn();
 
             if self.stop {

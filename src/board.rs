@@ -91,7 +91,11 @@ impl Board {
             if let Some(chip) = self.chips[idx] {
                 let bit = 1u64 << idx;
                 let is_p1 = (self.p1_pieces & bit) != 0;
-                let player = if is_p1 { Player::Player1 } else { Player::Player2 };
+                let player = if is_p1 {
+                    Player::Player1
+                } else {
+                    Player::Player2
+                };
                 let is_dama = (self.dama_pieces & bit) != 0;
                 hash ^= tables.piece_key(idx, player, is_dama, chip.value);
             }
@@ -122,7 +126,10 @@ impl Board {
         const DARK_BG: &str = "\x1b[100m";
         const RESET: &str = "\x1b[0m";
 
-        println!("{}{}{}{}{}", board_header_padding, "BOARD", gap, operator_header_padding, "OPERATORS");
+        println!(
+            "{}{}{}{}{}",
+            board_header_padding, "BOARD", gap, operator_header_padding, "OPERATORS"
+        );
         println!("{}{}{}", col_header, gap, col_header);
         println!("{}{}{}", top_border, gap, top_border);
 
@@ -140,8 +147,16 @@ impl Board {
                 } else {
                     match self.chips[idx] {
                         Some(ref chip) => {
-                            let symbol = if (self.p1_pieces & bit) != 0 { 'A' } else { 'B' };
-                            let dama_flag = if (self.dama_pieces & bit) != 0 { 'D' } else { ' ' };
+                            let symbol = if (self.p1_pieces & bit) != 0 {
+                                'A'
+                            } else {
+                                'B'
+                            };
+                            let dama_flag = if (self.dama_pieces & bit) != 0 {
+                                'D'
+                            } else {
+                                ' '
+                            };
                             main_line += &format!("{}{}{:>3}│", symbol, dama_flag, chip.value);
                         }
                         None => main_line += "     │",
@@ -218,7 +233,11 @@ impl Board {
 
         let is_dama = (self.dama_pieces & piece_bit) != 0;
         let is_p1 = (self.p1_pieces & piece_bit) != 0;
-        let opponent_pieces = if is_p1 { self.p2_pieces } else { self.p1_pieces };
+        let opponent_pieces = if is_p1 {
+            self.p2_pieces
+        } else {
+            self.p1_pieces
+        };
         let occupied = self.p1_pieces | self.p2_pieces;
 
         if is_dama {
@@ -353,7 +372,11 @@ impl Board {
         let from_bit = 1u64 << from_idx;
         let is_dama = (self.dama_pieces & from_bit) != 0;
         let is_p1 = (self.p1_pieces & from_bit) != 0;
-        let opponent = if is_p1 { self.p2_pieces } else { self.p1_pieces };
+        let opponent = if is_p1 {
+            self.p2_pieces
+        } else {
+            self.p1_pieces
+        };
         let occupied = self.p1_pieces | self.p2_pieces;
 
         let directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)];
@@ -382,7 +405,12 @@ impl Board {
                         if (occupied & bit) != 0 {
                             break;
                         }
-                        buf.push(Move { from_row: row, from_col: col, to_row: r, to_col: c });
+                        buf.push(Move {
+                            from_row: row,
+                            from_col: col,
+                            to_row: r,
+                            to_col: c,
+                        });
                     }
                     step += 1;
                 }
@@ -395,7 +423,12 @@ impl Board {
                     let mid_bit = 1u64 << (mid_r * 8 + mid_c) as usize;
                     let to_bit = 1u64 << (to_r * 8 + to_c) as usize;
                     if (opponent & mid_bit) != 0 && (occupied & to_bit) == 0 {
-                        buf.push(Move { from_row: row, from_col: col, to_row: to_r, to_col: to_c });
+                        buf.push(Move {
+                            from_row: row,
+                            from_col: col,
+                            to_row: to_r,
+                            to_col: to_c,
+                        });
                     }
                 }
             }
@@ -425,7 +458,12 @@ impl Board {
                         if (occupied & (1u64 << (r * 8 + c) as usize)) != 0 {
                             break;
                         }
-                        buf.push(Move { from_row: row, from_col: col, to_row: r, to_col: c });
+                        buf.push(Move {
+                            from_row: row,
+                            from_col: col,
+                            to_row: r,
+                            to_col: c,
+                        });
                         step += 1;
                     }
                 }
@@ -436,7 +474,12 @@ impl Board {
                     let c = col + dc;
                     if (0..8).contains(&r) && (0..8).contains(&c) {
                         if (occupied & (1u64 << (r * 8 + c) as usize)) == 0 {
-                            buf.push(Move { from_row: row, from_col: col, to_row: r, to_col: c });
+                            buf.push(Move {
+                                from_row: row,
+                                from_col: col,
+                                to_row: r,
+                                to_col: c,
+                            });
                         }
                     }
                 }
@@ -461,7 +504,11 @@ impl Board {
         let from_bit = 1u64 << from_idx;
         let is_dama = (self.dama_pieces & from_bit) != 0;
         let is_p1 = (self.p1_pieces & from_bit) != 0;
-        let opponent = if is_p1 { self.p2_pieces } else { self.p1_pieces };
+        let opponent = if is_p1 {
+            self.p2_pieces
+        } else {
+            self.p1_pieces
+        };
         let occupied = self.p1_pieces | self.p2_pieces;
 
         let mut count = 0usize;
@@ -657,7 +704,7 @@ impl Board {
                     from_idx,
                     to_idx,
                     moved_chip: chip,
-                    
+
                     promoted,
                     capture: None,
                     prev_forced_piece,
@@ -675,7 +722,7 @@ impl Board {
                     from_idx,
                     to_idx,
                     moved_chip: chip,
-                    
+
                     promoted: false,
                     capture: None,
                     prev_forced_piece,
@@ -778,7 +825,7 @@ impl Board {
             from_idx,
             to_idx,
             moved_chip: chip,
-            
+
             promoted,
             capture,
             prev_forced_piece,
@@ -799,7 +846,11 @@ impl Board {
         if undo.promoted {
             let bit = 1u64 << undo.to_idx;
             let is_p1 = (self.p1_pieces & bit) != 0;
-            let player = if is_p1 { Player::Player1 } else { Player::Player2 };
+            let player = if is_p1 {
+                Player::Player1
+            } else {
+                Player::Player2
+            };
             let value = self.chips[undo.to_idx]
                 .map(|c| c.value)
                 .unwrap_or(undo.moved_chip.value);
@@ -864,7 +915,11 @@ impl Board {
         }
         let is_p1 = (self.p1_pieces & bit) != 0;
         if (is_p1 && row == 7) || (!is_p1 && row == 0) {
-            let player = if is_p1 { Player::Player1 } else { Player::Player2 };
+            let player = if is_p1 {
+                Player::Player1
+            } else {
+                Player::Player2
+            };
             let tables = zobrist::tables();
             self.zobrist ^= tables.piece_key(idx, player, false, chip.value);
             self.dama_pieces |= bit;
@@ -882,7 +937,11 @@ impl Board {
         let from_bit = 1u64 << from_idx;
         let to_bit = 1u64 << to_idx;
         let is_p1 = (self.p1_pieces & from_bit) != 0;
-        let player = if is_p1 { Player::Player1 } else { Player::Player2 };
+        let player = if is_p1 {
+            Player::Player1
+        } else {
+            Player::Player2
+        };
         let was_dama = (self.dama_pieces & from_bit) != 0;
 
         let tables = zobrist::tables();
@@ -933,18 +992,36 @@ impl Board {
 
     fn init_integer_chips(&mut self) {
         let p1_layout = [
-            (0, 1, -11), (0, 3, 8), (0, 5, -5), (0, 7, 2),
-            (1, 0, 0), (1, 2, -3), (1, 4, 10), (1, 6, -7),
-            (2, 1, -9), (2, 3, 6), (2, 5, -1), (2, 7, 4),
+            (0, 1, -11),
+            (0, 3, 8),
+            (0, 5, -5),
+            (0, 7, 2),
+            (1, 0, 0),
+            (1, 2, -3),
+            (1, 4, 10),
+            (1, 6, -7),
+            (2, 1, -9),
+            (2, 3, 6),
+            (2, 5, -1),
+            (2, 7, 4),
         ];
         for &(row, col, val) in &p1_layout {
             self.chips[row * 8 + col] = Some(Chip::new(val));
         }
 
         let p2_layout = [
-            (5, 0, 4), (5, 2, -1), (5, 4, 6), (5, 6, -9),
-            (6, 1, -7), (6, 3, 10), (6, 5, -3), (6, 7, 0),
-            (7, 0, 2), (7, 2, -5), (7, 4, 8), (7, 6, -11),
+            (5, 0, 4),
+            (5, 2, -1),
+            (5, 4, 6),
+            (5, 6, -9),
+            (6, 1, -7),
+            (6, 3, 10),
+            (6, 5, -3),
+            (6, 7, 0),
+            (7, 0, 2),
+            (7, 2, -5),
+            (7, 4, 8),
+            (7, 6, -11),
         ];
         for &(row, col, val) in &p2_layout {
             self.chips[row * 8 + col] = Some(Chip::new(val));
@@ -956,10 +1033,34 @@ impl Board {
             for col in 0..8 {
                 let idx = row * 8 + col;
                 let op = match row {
-                    0 | 4 => match col { 1 => Some(Operator::Add), 3 => Some(Operator::Sub), 5 => Some(Operator::Div), 7 => Some(Operator::Mul), _ => None },
-                    1 | 5 => match col { 0 => Some(Operator::Sub), 2 => Some(Operator::Add), 4 => Some(Operator::Mul), 6 => Some(Operator::Div), _ => None },
-                    2 | 6 => match col { 1 => Some(Operator::Div), 3 => Some(Operator::Mul), 5 => Some(Operator::Add), 7 => Some(Operator::Sub), _ => None },
-                    3 | 7 => match col { 0 => Some(Operator::Mul), 2 => Some(Operator::Div), 4 => Some(Operator::Sub), 6 => Some(Operator::Add), _ => None },
+                    0 | 4 => match col {
+                        1 => Some(Operator::Add),
+                        3 => Some(Operator::Sub),
+                        5 => Some(Operator::Div),
+                        7 => Some(Operator::Mul),
+                        _ => None,
+                    },
+                    1 | 5 => match col {
+                        0 => Some(Operator::Sub),
+                        2 => Some(Operator::Add),
+                        4 => Some(Operator::Mul),
+                        6 => Some(Operator::Div),
+                        _ => None,
+                    },
+                    2 | 6 => match col {
+                        1 => Some(Operator::Div),
+                        3 => Some(Operator::Mul),
+                        5 => Some(Operator::Add),
+                        7 => Some(Operator::Sub),
+                        _ => None,
+                    },
+                    3 | 7 => match col {
+                        0 => Some(Operator::Mul),
+                        2 => Some(Operator::Div),
+                        4 => Some(Operator::Sub),
+                        6 => Some(Operator::Add),
+                        _ => None,
+                    },
                     _ => None,
                 };
                 self.operators[idx] = op;

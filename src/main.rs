@@ -89,13 +89,17 @@ fn final_scores(board: &Board) -> (i32, i32) {
     )
 }
 
-fn format_game_over(board: &Board) -> String {
+fn format_game_over(board: &Board, outcome: GameOutcome) -> String {
     let (p1_final, p2_final) = final_scores(board);
 
-    format!(
-        "{} to {}",
-        p1_final, p2_final
-    )
+    match outcome {
+        GameOutcome::Player2Win => {
+            format!("{} to {}", p2_final, p1_final)
+        }
+        _ => {
+            format!("{} to {}", p1_final, p2_final)
+        }
+    }
 }
 
 fn print_start_screen() {
@@ -155,18 +159,24 @@ fn print_game_over_screen(board: &Board) {
 
     print!("\x1B[2J\x1B[1;1H");
     println!("{}", game_over_art(outcome));
-    println!("{}", format_game_over(board));
+    println!("{}", format_game_over(board, outcome));
     println!();
     println!("Press (Enter) to return to the main menu.");
     io::stdout().flush().unwrap();
 }
 
-fn apply_engine_move(board: &mut Board, search: &mut Search, verbose: bool, depth: u32, time_limit_ms: u64) -> Option<String> {
+fn apply_engine_move(
+    board: &mut Board,
+    search: &mut Search,
+    verbose: bool,
+    depth: u32,
+    time_limit_ms: u64,
+) -> Option<String> {
     let (mv, score) = search.find_best_move(board, depth, time_limit_ms, verbose)?;
 
     match board.make_move(mv.from_row, mv.from_col, mv.to_row, mv.to_col) {
         Ok(_) => Some(format!(
-            "Engine played ({}, {}) -> ({}, {}) [score {}]",
+            "Computer ({}, {}) -> ({}, {}) [Score {}].",
             mv.from_row, mv.from_col, mv.to_row, mv.to_col, score
         )),
         Err(err) => Some(format!("Engine move was rejected by make_move: {}", err)),
@@ -190,15 +200,23 @@ fn apply_engine_move_with_min_delay(
 
     match board.make_move(mv.from_row, mv.from_col, mv.to_row, mv.to_col) {
         Ok(_) => Some(format!(
-            "Engine played ({}, {}) -> ({}, {}) [score {}]",
-            mv.from_row, mv.from_col, mv.to_row, mv.to_col, score
+            "{:?} played ({}, {}) -> ({}, {}) [Score {}]. {:?} thinking...",
+            board.current_turn.opponent(),
+            mv.from_row,
+            mv.from_col,
+            mv.to_row,
+            mv.to_col,
+            score,
+            board.current_turn.opponent().opponent()
         )),
         Err(err) => Some(format!("Engine move was rejected by make_move: {}", err)),
     }
 }
 
 fn run_human_vs_human(board: &mut Board) {
-    let mut info_message = String::from("[Game] Enter moves as: from_row from_col to_row to_col. Type 'quit' to return to main menu.");
+    let mut info_message = String::from(
+        "[Game] Enter moves as: from_row from_col to_row to_col. Type 'quit' to return to main menu.",
+    );
 
     loop {
         if board.terminal_outcome().is_some() {
@@ -217,7 +235,7 @@ fn run_human_vs_human(board: &mut Board) {
         }
 
         let input = input.trim();
-            if input.eq_ignore_ascii_case("quit") || input.eq_ignore_ascii_case("exit") {
+        if input.eq_ignore_ascii_case("quit") || input.eq_ignore_ascii_case("exit") {
             println!("{}", EXIT_MESSAGE);
             break;
         }
@@ -251,7 +269,9 @@ fn run_human_vs_human(board: &mut Board) {
 }
 
 fn run_human_vs_engine(board: &mut Board, search: &mut Search) {
-    let mut info_message = String::from("Enter moves as: from_row from_col to_row to_col. Type 'quit' to return to main menu.");
+    let mut info_message = String::from(
+        "Enter moves as: from_row from_col to_row to_col. Type 'quit' to return to main menu.",
+    );
 
     loop {
         if board.terminal_outcome().is_some() {
@@ -290,7 +310,7 @@ fn run_human_vs_engine(board: &mut Board, search: &mut Search) {
         }
 
         let input = input.trim();
-            if input.eq_ignore_ascii_case("quit") || input.eq_ignore_ascii_case("exit") {
+        if input.eq_ignore_ascii_case("quit") || input.eq_ignore_ascii_case("exit") {
             println!("{}", EXIT_MESSAGE);
             break;
         }
@@ -325,7 +345,8 @@ fn run_human_vs_engine(board: &mut Board, search: &mut Search) {
 }
 
 fn run_engine_vs_engine(board: &mut Board, search: &mut Search) {
-    let mut info_message = String::from("[Engine vs. Engine] Moves are made automatically.");
+    let mut info_message =
+        String::from("[Computer vs. Computer] Both sides are played by the computer.");
 
     loop {
         if board.terminal_outcome().is_some() {
@@ -344,7 +365,7 @@ fn run_engine_vs_engine(board: &mut Board, search: &mut Search) {
             ENGINE_TIME_LIMIT,
             ENGINE_VS_ENGINE_MIN_MOVE_DELAY,
         )
-            .unwrap_or_else(|| String::from("Engine found no legal moves (game over?)."));
+        .unwrap_or_else(|| String::from("Computer found no legal moves (game over?)."));
 
         if board.terminal_outcome().is_some() {
             print_game_over_screen(board);
@@ -356,9 +377,8 @@ fn run_engine_vs_engine(board: &mut Board, search: &mut Search) {
 }
 
 fn run_analysis(board: &mut Board, search: &mut Search) {
-    let mut info_message = String::from(
-        "[Analysis] Press Enter for the best move, or enter a move to play it.",
-    );
+    let mut info_message =
+        String::from("[Analysis] Press Enter for the best move, or enter a move to play it.");
 
     loop {
         if board.terminal_outcome().is_some() {
@@ -387,7 +407,10 @@ fn run_analysis(board: &mut Board, search: &mut Search) {
         if input.is_empty() {
             print!("\x1B[2J\x1B[1;1H");
             board.display();
-            println!("Analyzing (depth up to {}, {}s budget)...\n", ENGINE_DEPTH, ENGINE_TIME_LIMIT);
+            println!(
+                "Analyzing (depth up to {}, {}s budget)...\n",
+                ENGINE_DEPTH, ENGINE_TIME_LIMIT
+            );
 
             match search.find_best_move(board, ENGINE_DEPTH, ENGINE_TIME_LIMIT, true) {
                 Some((mv, score)) => {
@@ -404,7 +427,9 @@ fn run_analysis(board: &mut Board, search: &mut Search) {
             println!("\nPress Enter to continue...");
             let mut pause = String::new();
             io::stdin().read_line(&mut pause).ok();
-            info_message = String::from("Analysis mode. Press Enter for the best move, or enter a move to play it.");
+            info_message = String::from(
+                "Analysis mode. Press Enter for the best move, or enter a move to play it.",
+            );
             continue;
         }
 
