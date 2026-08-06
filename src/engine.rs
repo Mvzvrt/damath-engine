@@ -51,10 +51,6 @@ impl TranspositionTable {
         }
     }
 
-    fn clear(&mut self) {
-        self.slots.iter_mut().for_each(|s| *s = None);
-    }
-
     fn get(&self, key: u64) -> Option<&TTEntry> {
         let idx = (key & TT_MASK) as usize;
         self.slots[idx]
@@ -100,12 +96,6 @@ impl Search {
         }
     }
 
-    pub fn reset(&mut self) {
-        self.tt.clear();
-        self.killers = [[None; 2]; 128];
-        self.search_path.clear();
-    }
-
     fn take_buffer(&mut self, idx: usize) -> Vec<Move> {
         while self.move_buffers.len() <= idx {
             self.move_buffers.push(Vec::new());
@@ -122,6 +112,7 @@ impl Search {
         board: &mut Board,
         max_depth: u32,
         time_limit_ms: u64,
+        verbose: bool,
     ) -> Option<(Move, i32)> {
         self.start_time = Instant::now();
         self.time_limit = Duration::from_millis(time_limit_ms);
@@ -139,13 +130,15 @@ impl Search {
 
             if let Some((mv, score)) = result {
                 best_overall = Some((mv, score));
-                println!(
-                    "info depth {} score {} nodes {} time {}ms",
-                    depth,
-                    score,
-                    self.nodes,
-                    self.start_time.elapsed().as_millis()
-                );
+                if verbose {
+                    println!(
+                        "info depth {} score {} nodes {} time {}ms",
+                        depth,
+                        score,
+                        self.nodes,
+                        self.start_time.elapsed().as_millis()
+                    );
+                }
                 if score.abs() >= MATE_VALUE - 1000 {
                     break;
                 }

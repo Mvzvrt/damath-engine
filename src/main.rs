@@ -6,64 +6,178 @@ mod undo;
 mod zobrist;
 
 use board::Board;
+use board::GameOutcome;
 use engine::Search;
 use piece::Player;
 use std::io::{self, Write};
 
-fn format_game_over(board: &Board) -> String {
-    let p1_final = board.p1_score + board.remaining_piece_value(Player::Player1);
-    let p2_final = board.p2_score + board.remaining_piece_value(Player::Player2);
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum SessionMode {
+    HumanVsHuman,
+    HumanVsEngine,
+    EngineVsEngine,
+    Analysis,
+    Exit,
+}
 
-    match p1_final.cmp(&p2_final) {
-        std::cmp::Ordering::Greater => format!(
-            "Game over. Player 1 wins. Final scores: {} to {}.",
-            p1_final, p2_final
-        ),
-        std::cmp::Ordering::Less => format!(
-            "Game over. Player 2 wins. Final scores: {} to {}.",
-            p1_final, p2_final
-        ),
-        std::cmp::Ordering::Equal => format!(
-            "Game over. Draw. Final scores: {} to {}.",
-            p1_final, p2_final
-        ),
+fn hero_art() -> &'static str {
+    r#"
+██████╗  █████╗ ███╗   ███╗ █████╗ ██╗  ██╗
+██╔══██╗██╔══██╗████╗ ████║██╔══██╗╚██╗██╔╝
+██║  ██║███████║██╔████╔██║███████║ ╚███╔╝ 
+██║  ██║██╔══██║██║╚██╔╝██║██╔══██║ ██╔██╗ 
+██████╔╝██║  ██║██║ ╚═╝ ██║██║  ██║██╔╝ ██╗
+╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝
+"#
+}
+
+fn hero_subtitle() -> &'static str {
+    r#"
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  A handcrafted evaluation engine for Integer Damath inspired by Pre-NNUE     ║
+║  Stockfish architecture.                                                     ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+"#
+}
+
+fn game_over_art(outcome: GameOutcome) -> &'static str {
+    match outcome {
+        GameOutcome::Player1Win => {
+            r#"
+██████╗ ██╗      █████╗ ██╗   ██╗███████╗██████╗   ███╗   ██╗    ██╗██╗███╗   ██╗██████╗ ██╗
+██╔══██╗██║     ██╔══██╗╚██╗ ██╔╝██╔════╝██╔══██╗  ╚██║   ██║    ██║██║████╗  ██║██╔════╝ ██║
+██████╔╝██║     ███████║ ╚████╔╝ █████╗  ██████╔╝   ██║   ██║ █╗ ██║██║██╔██╗ ██║███████╗ ██║
+██╔═══╝ ██║     ██╔══██║  ╚██╔╝  ██╔══╝  ██╔══██╗   ██║   ██║███╗██║██║██║╚██╗██║╚════██║ ╚═╝
+██║     ███████╗██║  ██║   ██║   ███████╗██║  ██║   ██║   ╚███╔███╔╝██║██║ ╚████║███████║ ██╗
+╚═╝     ╚══════╝╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝   ╚═╝    ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝╚══════╝ ╚═╝
+"#
+        }
+        GameOutcome::Player2Win => {
+            r#"
+██████╗ ██╗      █████╗ ██╗   ██╗███████╗██████╗  ██████╗ ██╗    ██╗██╗███╗   ██╗██████╗ ██╗
+██╔══██╗██║     ██╔══██╗╚██╗ ██╔╝██╔════╝██╔══██╗ ╚════██╗██║    ██║██║████╗  ██║██╔════╝ ██║
+██████╔╝██║     ███████║ ╚████╔╝ █████╗  ██████╔╝  █████╔╝██║ █╗ ██║██║██╔██╗ ██║███████╗ ██║
+██╔═══╝ ██║     ██╔══██║  ╚██╔╝  ██╔══╝  ██╔══██╗ ██╔═══╝ ██║███╗██║██║██║╚██╗██║╚════██║ ╚═╝
+██║     ███████╗██║  ██║   ██║   ███████╗██║  ██║ ███████╗╚███╔███╔╝██║██║ ╚████║███████║ ██╗
+╚═╝     ╚══════╝╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝ ╚══════╝ ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝╚══════╝ ╚═╝
+"#
+        }
+        GameOutcome::Draw => {
+            r#"
+██████╗ ██████╗  █████╗ ██╗    ██╗██╗
+██╔══██╗██╔══██╗██╔══██╗██║    ██║██║
+██║  ██║██████╔╝███████║██║ █╗ ██║██║
+██║  ██║██╔══██╗██╔══██║██║███╗██║╚═╝
+██████╔╝██║  ██║██║  ██║╚███╔███╔╝██╗
+╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═╝
+"#
+        }
     }
 }
 
-fn main() {
-    let mut board = Board::new();
-    let mut search = Search::new();
-    let mut info_message = String::from(
-        "Game started. Enter moves as: from_row from_col to_row to_col. \
-         'ai' lets the engine move, 'analyze' shows live search scores \
-         without moving, 'newgame' resets everything, or 'quit'.",
-    );
+fn final_scores(board: &Board) -> (i32, i32) {
+    (
+        board.p1_score + board.remaining_piece_value(Player::Player1),
+        board.p2_score + board.remaining_piece_value(Player::Player2),
+    )
+}
+
+fn format_game_over(board: &Board) -> String {
+    let (p1_final, p2_final) = final_scores(board);
+
+    format!(
+        "{} to {}",
+        p1_final, p2_final
+    )
+}
+
+fn print_start_screen() {
+    print!("\x1B[2J\x1B[1;1H");
+    println!("{}", hero_art());
+    println!("{}", hero_subtitle());
+    println!();
+    println!("Choose a mode:");
+    println!("  1) Play new game");
+    println!("  2) Play against engine");
+    println!("  3) Watch engine against engine");
+    println!("  4) Analysis");
+    println!("  5) Exit");
+    println!();
+}
+
+fn prompt_mode() -> SessionMode {
+    loop {
+        print!("Select mode [1-5]: ");
+        io::stdout().flush().unwrap();
+
+        let mut input = String::new();
+        if io::stdin().read_line(&mut input).is_err() {
+            continue;
+        }
+
+        match input.trim() {
+            "1" => return SessionMode::HumanVsHuman,
+            "2" => return SessionMode::HumanVsEngine,
+            "3" => return SessionMode::EngineVsEngine,
+            "4" => return SessionMode::Analysis,
+            "5" => return SessionMode::Exit,
+            _ => {
+                println!("Please enter 1, 2, 3, 4, or 5.");
+            }
+        }
+    }
+}
+
+fn print_board_frame(board: &Board, info_message: &str, prompt: Option<&str>) {
+    print!("\x1B[2J\x1B[1;1H");
+    board.display();
+    println!("-------------------------------------------------------");
+    println!("Turn: {:?}", board.current_turn);
+    println!("Player 1: {}", board.p1_score);
+    println!("Player 2: {}", board.p2_score);
+    println!("Info: {}", info_message);
+    println!("-------------------------------------------------------");
+    if let Some(prompt) = prompt {
+        print!("{}", prompt);
+        io::stdout().flush().unwrap();
+    }
+}
+
+fn print_game_over_screen(board: &Board) {
+    let outcome = board.terminal_outcome().unwrap_or(GameOutcome::Draw);
+
+    print!("\x1B[2J\x1B[1;1H");
+    println!("{}", game_over_art(outcome));
+    println!("{}", format_game_over(board));
+    println!();
+    println!("Press (Enter) to return to the main menu.");
+    io::stdout().flush().unwrap();
+}
+
+fn apply_engine_move(board: &mut Board, search: &mut Search, verbose: bool, depth: u32, time_limit_ms: u64) -> Option<String> {
+    let (mv, score) = search.find_best_move(board, depth, time_limit_ms, verbose)?;
+
+    match board.make_move(mv.from_row, mv.from_col, mv.to_row, mv.to_col) {
+        Ok(_) => Some(format!(
+            "Engine played ({}, {}) -> ({}, {}) [score {}]",
+            mv.from_row, mv.from_col, mv.to_row, mv.to_col, score
+        )),
+        Err(err) => Some(format!("Engine move was rejected by make_move: {}", err)),
+    }
+}
+
+fn run_human_vs_human(board: &mut Board) {
+    let mut info_message = String::from("Human vs human mode. Enter moves as: from_row from_col to_row to_col. Type 'quit' to exit to desktop.");
 
     loop {
         if board.terminal_outcome().is_some() {
-            info_message = format_game_over(&board);
-            print!("\x1B[2J\x1B[1;1H");
-            board.display();
-            println!("-------------------------------------------------------");
-            println!("Turn: {:?}", board.current_turn);
-            println!("Player 1: {}", board.p1_score);
-            println!("Player 2: {}", board.p2_score);
-            println!("Info: {}", info_message);
-            println!("-------------------------------------------------------");
+            print_game_over_screen(board);
+            let mut pause = String::new();
+            io::stdin().read_line(&mut pause).ok();
             break;
         }
 
-        print!("\x1B[2J\x1B[1;1H");
-        board.display();
-        println!("-------------------------------------------------------");
-        println!("Turn: {:?}", board.current_turn);
-        println!("Player 1: {}", board.p1_score);
-        println!("Player 2: {}", board.p2_score);
-        println!("Info: {}", info_message);
-        println!("-------------------------------------------------------");
-
-        print!("Move (or 'ai' / 'analyze' / 'newgame' / 'quit'): ");
-        io::stdout().flush().unwrap();
+        print_board_frame(board, &info_message, Some("Move: "));
 
         let mut input = String::new();
         if io::stdin().read_line(&mut input).is_err() {
@@ -72,64 +186,9 @@ fn main() {
         }
 
         let input = input.trim();
-
         if input.eq_ignore_ascii_case("quit") {
             println!("Exiting DaMath engine. Goodbye!");
             break;
-        }
-
-        if input.eq_ignore_ascii_case("newgame") {
-            board = Board::new();
-            search.reset();
-            info_message = String::from("New game started, search state cleared.");
-            continue;
-        }
-
-        if input.eq_ignore_ascii_case("analyze") {
-            print!("\x1B[2J\x1B[1;1H");
-            board.display();
-            println!("Analyzing (depth up to 24, 8s budget)...\n");
-
-            match search.find_best_move(&mut board, 24, 8000) {
-                Some((mv, score)) => {
-                    info_message = format!(
-                        "Analysis complete. Best line starts ({}, {}) -> ({}, {}), score {}. \
-                         (Not played — enter a move manually or type 'ai'.)",
-                        mv.from_row, mv.from_col, mv.to_row, mv.to_col, score
-                    );
-                }
-                None => {
-                    info_message = String::from("Analysis found no legal moves (game over?).");
-                }
-            }
-
-            println!("\nPress Enter to continue...");
-            let mut _pause = String::new();
-            io::stdin().read_line(&mut _pause).ok();
-            continue;
-        }
-
-        if input.eq_ignore_ascii_case("ai") {
-            match search.find_best_move(&mut board, 20, 4000) {
-                Some((mv, score)) => {
-                    match board.make_move(mv.from_row, mv.from_col, mv.to_row, mv.to_col) {
-                        Ok(_) => {
-                            info_message = format!(
-                                "Engine played ({}, {}) -> ({}, {}) [searched score {}]",
-                                mv.from_row, mv.from_col, mv.to_row, mv.to_col, score
-                            );
-                        }
-                        Err(err) => {
-                            info_message =
-                                format!("Engine move was rejected by make_move: {}", err);
-                        }
-                    }
-                }
-                None => {
-                    info_message = String::from("Engine found no legal moves (game over?).");
-                }
-            }
-            continue;
         }
 
         let parts: Vec<i32> = input
@@ -138,31 +197,190 @@ fn main() {
             .collect();
 
         if parts.len() != 4 {
-            info_message = String::from(
-                "Invalid format! Enter 4 numbers separated by spaces (e.g. 2 1 3 2), or 'ai'/'analyze'/'newgame'/'quit'.",
-            );
+            info_message = String::from("Invalid format. Enter 4 numbers separated by spaces.");
             continue;
         }
 
-        let from_row = parts[0];
-        let from_col = parts[1];
-        let to_row = parts[2];
-        let to_col = parts[3];
-
-        match board.make_move(from_row, from_col, to_row, to_col) {
+        match board.make_move(parts[0], parts[1], parts[2], parts[3]) {
             Ok(_) => {
-                info_message = format!(
-                    "Successfully moved from ({}, {}) to ({}, {}).",
-                    from_row, from_col, to_row, to_col
-                );
+                info_message = String::from("Move applied.");
             }
             Err(err) => {
-                info_message = format!("{}", err);
+                info_message = err.to_string();
             }
         }
 
         if board.terminal_outcome().is_some() {
-            info_message = format_game_over(&board);
+            print_game_over_screen(board);
+            let mut pause = String::new();
+            io::stdin().read_line(&mut pause).ok();
+            break;
+        }
+    }
+}
+
+fn run_human_vs_engine(board: &mut Board, search: &mut Search) {
+    let mut info_message = String::from("Human vs engine mode. You play Player 1. Enter your move as four numbers.");
+
+    loop {
+        if board.terminal_outcome().is_some() {
+            print_game_over_screen(board);
+            let mut pause = String::new();
+            io::stdin().read_line(&mut pause).ok();
+            break;
+        }
+
+        print_board_frame(
+            board,
+            &info_message,
+            if board.current_turn == Player::Player1 {
+                Some("Your move: ")
+            } else {
+                None
+            },
+        );
+
+        if board.current_turn == Player::Player2 {
+            info_message = apply_engine_move(board, search, true, 20, 4000)
+                .unwrap_or_else(|| String::from("Engine found no legal moves (game over?)."));
+            if board.terminal_outcome().is_some() {
+                print_game_over_screen(board);
+                let mut pause = String::new();
+                io::stdin().read_line(&mut pause).ok();
+                break;
+            }
+            continue;
+        }
+
+        let mut input = String::new();
+        if io::stdin().read_line(&mut input).is_err() {
+            info_message = String::from("Error reading input. Please try again.");
+            continue;
+        }
+
+        let input = input.trim();
+        if input.eq_ignore_ascii_case("quit") {
+            println!("Exiting DaMath engine. Goodbye!");
+            break;
+        }
+
+        let parts: Vec<i32> = input
+            .split_whitespace()
+            .filter_map(|s| s.parse::<i32>().ok())
+            .collect();
+
+        if parts.len() != 4 {
+            info_message = String::from("Invalid format. Enter 4 numbers separated by spaces.");
+            continue;
+        }
+
+        match board.make_move(parts[0], parts[1], parts[2], parts[3]) {
+            Ok(_) => {
+                info_message = String::from("Move applied. Engine thinking...");
+            }
+            Err(err) => {
+                info_message = err.to_string();
+                continue;
+            }
+        }
+
+        if board.terminal_outcome().is_some() {
+            print_game_over_screen(board);
+            let mut pause = String::new();
+            io::stdin().read_line(&mut pause).ok();
+            break;
+        }
+    }
+}
+
+fn run_engine_vs_engine(board: &mut Board, search: &mut Search) {
+    let mut info_message = String::from("Engine vs engine mode. Watching both sides play automatically.");
+
+    loop {
+        if board.terminal_outcome().is_some() {
+            print_game_over_screen(board);
+            let mut pause = String::new();
+            io::stdin().read_line(&mut pause).ok();
+            break;
+        }
+
+        print_board_frame(board, &info_message, None);
+
+        info_message = apply_engine_move(board, search, false, 20, 2500)
+            .unwrap_or_else(|| String::from("Engine found no legal moves (game over?)."));
+
+        if board.terminal_outcome().is_some() {
+            print_game_over_screen(board);
+            let mut pause = String::new();
+            io::stdin().read_line(&mut pause).ok();
+            break;
+        }
+    }
+}
+
+fn run_analysis(board: &mut Board, search: &mut Search) {
+    let info_message = String::from("Analysis mode. The engine will show the best move for the current position without playing it.");
+
+    loop {
+        if board.terminal_outcome().is_some() {
+            print_game_over_screen(board);
+            let mut pause = String::new();
+            io::stdin().read_line(&mut pause).ok();
+            break;
+        }
+
+        print_board_frame(board, &info_message, Some("Enter to analyze, or type 'back' to return: "));
+
+        let mut input = String::new();
+        if io::stdin().read_line(&mut input).is_err() {
+            continue;
+        }
+
+        let input = input.trim();
+        if input.eq_ignore_ascii_case("back") {
+            break;
+        }
+
+        print!("\x1B[2J\x1B[1;1H");
+        board.display();
+        println!("Analyzing (depth up to 24, 8s budget)...\n");
+
+        match search.find_best_move(board, 24, 8000, true) {
+            Some((mv, score)) => {
+                println!(
+                    "Best move: ({}, {}) -> ({}, {}) [score {}]",
+                    mv.from_row, mv.from_col, mv.to_row, mv.to_col, score
+                );
+            }
+            None => {
+                println!("Analysis found no legal moves (game over?).");
+            }
+        }
+
+        println!("\nPress Enter to continue...");
+        let mut _pause = String::new();
+        io::stdin().read_line(&mut _pause).ok();
+    }
+}
+
+fn main() {
+    let mut search = Search::new();
+    loop {
+        print_start_screen();
+        let mode = prompt_mode();
+        if mode == SessionMode::Exit {
+            println!("Exiting DaMath engine. Goodbye!");
+            break;
+        }
+
+        let mut board = Board::new();
+
+        match mode {
+            SessionMode::HumanVsHuman => run_human_vs_human(&mut board),
+            SessionMode::HumanVsEngine => run_human_vs_engine(&mut board, &mut search),
+            SessionMode::EngineVsEngine => run_engine_vs_engine(&mut board, &mut search),
+            SessionMode::Analysis => run_analysis(&mut board, &mut search),
+            SessionMode::Exit => unreachable!(),
         }
     }
 }
