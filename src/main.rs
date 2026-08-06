@@ -17,7 +17,7 @@ enum SessionMode {
     HumanVsEngine,
     EngineVsEngine,
     Analysis,
-    Exit,
+    Quit,
 }
 
 fn hero_art() -> &'static str {
@@ -101,7 +101,7 @@ fn print_start_screen() {
     println!("  2) Play against engine");
     println!("  3) Watch engine against engine");
     println!("  4) Analysis");
-    println!("  5) Exit");
+    println!("  5) Quit");
     println!();
 }
 
@@ -120,7 +120,7 @@ fn prompt_mode() -> SessionMode {
             "2" => return SessionMode::HumanVsEngine,
             "3" => return SessionMode::EngineVsEngine,
             "4" => return SessionMode::Analysis,
-            "5" => return SessionMode::Exit,
+            "5" => return SessionMode::Quit,
             _ => {
                 println!("Please enter 1, 2, 3, 4, or 5.");
             }
@@ -167,7 +167,7 @@ fn apply_engine_move(board: &mut Board, search: &mut Search, verbose: bool, dept
 }
 
 fn run_human_vs_human(board: &mut Board) {
-    let mut info_message = String::from("Human vs human mode. Enter moves as: from_row from_col to_row to_col. Type 'quit' to exit to desktop.");
+    let mut info_message = String::from("Enter moves as: from_row from_col to_row to_col. Type 'quit' to return to main menu.");
 
     loop {
         if board.terminal_outcome().is_some() {
@@ -186,7 +186,7 @@ fn run_human_vs_human(board: &mut Board) {
         }
 
         let input = input.trim();
-        if input.eq_ignore_ascii_case("quit") {
+            if input.eq_ignore_ascii_case("quit") || input.eq_ignore_ascii_case("exit") {
             println!("Exiting DaMath engine. Goodbye!");
             break;
         }
@@ -220,7 +220,7 @@ fn run_human_vs_human(board: &mut Board) {
 }
 
 fn run_human_vs_engine(board: &mut Board, search: &mut Search) {
-    let mut info_message = String::from("Human vs engine mode. You play Player 1. Enter your move as four numbers.");
+    let mut info_message = String::from("Enter moves as: from_row from_col to_row to_col. Type 'quit' to return to main menu.");
 
     loop {
         if board.terminal_outcome().is_some() {
@@ -241,7 +241,7 @@ fn run_human_vs_engine(board: &mut Board, search: &mut Search) {
         );
 
         if board.current_turn == Player::Player2 {
-            info_message = apply_engine_move(board, search, true, 20, 4000)
+            info_message = apply_engine_move(board, search, false, 20, 4000)
                 .unwrap_or_else(|| String::from("Engine found no legal moves (game over?)."));
             if board.terminal_outcome().is_some() {
                 print_game_over_screen(board);
@@ -259,7 +259,7 @@ fn run_human_vs_engine(board: &mut Board, search: &mut Search) {
         }
 
         let input = input.trim();
-        if input.eq_ignore_ascii_case("quit") {
+            if input.eq_ignore_ascii_case("quit") || input.eq_ignore_ascii_case("exit") {
             println!("Exiting DaMath engine. Goodbye!");
             break;
         }
@@ -319,7 +319,9 @@ fn run_engine_vs_engine(board: &mut Board, search: &mut Search) {
 }
 
 fn run_analysis(board: &mut Board, search: &mut Search) {
-    let info_message = String::from("Analysis mode. The engine will show the best move for the current position without playing it.");
+    let mut info_message = String::from(
+        "Analysis mode. Press Enter for the best move, or enter a move to play it.",
+    );
 
     loop {
         if board.terminal_outcome().is_some() {
@@ -329,7 +331,11 @@ fn run_analysis(board: &mut Board, search: &mut Search) {
             break;
         }
 
-        print_board_frame(board, &info_message, Some("Enter to analyze, or type 'back' to return: "));
+        print_board_frame(
+            board,
+            &info_message,
+            Some("Enter for best move, type a move, or 'quit': "),
+        );
 
         let mut input = String::new();
         if io::stdin().read_line(&mut input).is_err() {
@@ -337,29 +343,62 @@ fn run_analysis(board: &mut Board, search: &mut Search) {
         }
 
         let input = input.trim();
-        if input.eq_ignore_ascii_case("back") {
+        if input.eq_ignore_ascii_case("quit") {
             break;
         }
 
-        print!("\x1B[2J\x1B[1;1H");
-        board.display();
-        println!("Analyzing (depth up to 24, 8s budget)...\n");
+        if input.is_empty() {
+            print!("\x1B[2J\x1B[1;1H");
+            board.display();
+            println!("Analyzing (depth up to 24, 8s budget)...\n");
 
-        match search.find_best_move(board, 24, 8000, true) {
-            Some((mv, score)) => {
-                println!(
-                    "Best move: ({}, {}) -> ({}, {}) [score {}]",
-                    mv.from_row, mv.from_col, mv.to_row, mv.to_col, score
-                );
+            match search.find_best_move(board, 24, 8000, true) {
+                Some((mv, score)) => {
+                    println!(
+                        "Best move: ({}, {}) -> ({}, {}) [score {}]",
+                        mv.from_row, mv.from_col, mv.to_row, mv.to_col, score
+                    );
+                }
+                None => {
+                    println!("Analysis found no legal moves (game over?).");
+                }
             }
-            None => {
-                println!("Analysis found no legal moves (game over?).");
+
+            println!("\nPress Enter to continue...");
+            let mut pause = String::new();
+            io::stdin().read_line(&mut pause).ok();
+            info_message = String::from("Analysis mode. Press Enter for the best move, or enter a move to play it.");
+            continue;
+        }
+
+        let parts: Vec<i32> = input
+            .split_whitespace()
+            .filter_map(|s| s.parse::<i32>().ok())
+            .collect();
+
+        if parts.len() != 4 {
+            info_message = String::from(
+                "Invalid format. Press Enter for a suggestion, or enter 4 numbers to play a move.",
+            );
+            continue;
+        }
+
+        match board.make_move(parts[0], parts[1], parts[2], parts[3]) {
+            Ok(_) => {
+                info_message = String::from("Move applied. Press Enter to analyze again.");
+            }
+            Err(err) => {
+                info_message = err.to_string();
+                continue;
             }
         }
 
-        println!("\nPress Enter to continue...");
-        let mut _pause = String::new();
-        io::stdin().read_line(&mut _pause).ok();
+        if board.terminal_outcome().is_some() {
+            print_game_over_screen(board);
+            let mut pause = String::new();
+            io::stdin().read_line(&mut pause).ok();
+            break;
+        }
     }
 }
 
@@ -368,7 +407,7 @@ fn main() {
     loop {
         print_start_screen();
         let mode = prompt_mode();
-        if mode == SessionMode::Exit {
+        if mode == SessionMode::Quit {
             println!("Exiting DaMath engine. Goodbye!");
             break;
         }
@@ -380,7 +419,7 @@ fn main() {
             SessionMode::HumanVsEngine => run_human_vs_engine(&mut board, &mut search),
             SessionMode::EngineVsEngine => run_engine_vs_engine(&mut board, &mut search),
             SessionMode::Analysis => run_analysis(&mut board, &mut search),
-            SessionMode::Exit => unreachable!(),
+            SessionMode::Quit => unreachable!(),
         }
     }
 }

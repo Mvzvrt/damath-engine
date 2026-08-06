@@ -132,7 +132,7 @@ impl Search {
                 best_overall = Some((mv, score));
                 if verbose {
                     println!(
-                        "info depth {} score {} nodes {} time {}ms",
+                        "[Depth {}:] Score = {} at nodes {} : Time: {}ms",
                         depth,
                         score,
                         self.nodes,
