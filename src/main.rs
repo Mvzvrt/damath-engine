@@ -10,6 +10,12 @@ use board::GameOutcome;
 use engine::Search;
 use piece::Player;
 use std::io::{self, Write};
+use std::thread;
+use std::time::{Duration, Instant};
+
+const ENGINE_DEPTH: u32 = 24;
+const ENGINE_TIME_LIMIT: u64 = 8_000;
+const ENGINE_VS_ENGINE_MIN_MOVE_DELAY: Duration = Duration::from_secs(1);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum SessionMode {
@@ -95,8 +101,8 @@ fn print_start_screen() {
     print!("\x1B[2J\x1B[1;1H");
     println!("{}", hero_art());
     println!("{}", hero_subtitle());
-    println!();
     println!("Choose a mode:");
+    println!();
     println!("  1) Play new game");
     println!("  2) Play against engine");
     println!("  3) Watch engine against engine");
@@ -166,8 +172,32 @@ fn apply_engine_move(board: &mut Board, search: &mut Search, verbose: bool, dept
     }
 }
 
+fn apply_engine_move_with_min_delay(
+    board: &mut Board,
+    search: &mut Search,
+    depth: u32,
+    time_limit_ms: u64,
+    min_move_delay: Duration,
+) -> Option<String> {
+    let start = Instant::now();
+    let (mv, score) = search.find_best_move(board, depth, time_limit_ms, false)?;
+
+    let elapsed = start.elapsed();
+    if elapsed < min_move_delay {
+        thread::sleep(min_move_delay - elapsed);
+    }
+
+    match board.make_move(mv.from_row, mv.from_col, mv.to_row, mv.to_col) {
+        Ok(_) => Some(format!(
+            "Engine played ({}, {}) -> ({}, {}) [score {}]",
+            mv.from_row, mv.from_col, mv.to_row, mv.to_col, score
+        )),
+        Err(err) => Some(format!("Engine move was rejected by make_move: {}", err)),
+    }
+}
+
 fn run_human_vs_human(board: &mut Board) {
-    let mut info_message = String::from("Enter moves as: from_row from_col to_row to_col. Type 'quit' to return to main menu.");
+    let mut info_message = String::from("[Game] Enter moves as: from_row from_col to_row to_col. Type 'quit' to return to main menu.");
 
     loop {
         if board.terminal_outcome().is_some() {
@@ -241,7 +271,7 @@ fn run_human_vs_engine(board: &mut Board, search: &mut Search) {
         );
 
         if board.current_turn == Player::Player2 {
-            info_message = apply_engine_move(board, search, false, 20, 4000)
+            info_message = apply_engine_move(board, search, false, ENGINE_DEPTH, ENGINE_TIME_LIMIT)
                 .unwrap_or_else(|| String::from("Engine found no legal moves (game over?)."));
             if board.terminal_outcome().is_some() {
                 print_game_over_screen(board);
@@ -294,7 +324,7 @@ fn run_human_vs_engine(board: &mut Board, search: &mut Search) {
 }
 
 fn run_engine_vs_engine(board: &mut Board, search: &mut Search) {
-    let mut info_message = String::from("Engine vs engine mode. Watching both sides play automatically.");
+    let mut info_message = String::from("[Engine vs. Engine] Moves are made automatically.");
 
     loop {
         if board.terminal_outcome().is_some() {
@@ -306,7 +336,13 @@ fn run_engine_vs_engine(board: &mut Board, search: &mut Search) {
 
         print_board_frame(board, &info_message, None);
 
-        info_message = apply_engine_move(board, search, false, 20, 2500)
+        info_message = apply_engine_move_with_min_delay(
+            board,
+            search,
+            ENGINE_DEPTH,
+            ENGINE_TIME_LIMIT,
+            ENGINE_VS_ENGINE_MIN_MOVE_DELAY,
+        )
             .unwrap_or_else(|| String::from("Engine found no legal moves (game over?)."));
 
         if board.terminal_outcome().is_some() {
@@ -320,7 +356,7 @@ fn run_engine_vs_engine(board: &mut Board, search: &mut Search) {
 
 fn run_analysis(board: &mut Board, search: &mut Search) {
     let mut info_message = String::from(
-        "Analysis mode. Press Enter for the best move, or enter a move to play it.",
+        "[Analysis] Press Enter for the best move, or enter a move to play it.",
     );
 
     loop {
@@ -352,10 +388,10 @@ fn run_analysis(board: &mut Board, search: &mut Search) {
             board.display();
             println!("Analyzing (depth up to 24, 8s budget)...\n");
 
-            match search.find_best_move(board, 24, 8000, true) {
+            match search.find_best_move(board, ENGINE_DEPTH, ENGINE_TIME_LIMIT, true) {
                 Some((mv, score)) => {
                     println!(
-                        "Best move: ({}, {}) -> ({}, {}) [score {}]",
+                        "[Best move]: ({}, {}) -> ({}, {}) [score {}]",
                         mv.from_row, mv.from_col, mv.to_row, mv.to_col, score
                     );
                 }
