@@ -1,6 +1,6 @@
 use crate::board::{Board, Move};
 use crate::piece::Player;
-use std::collections::HashMap;
+use std::mem;
 use std::time::{Duration, Instant};
 
 const SCORE_WEIGHT: i32 = 100;
@@ -14,6 +14,10 @@ const TEMPO_BONUS: i32 = 5;
 const MATE_VALUE: i32 = 1_000_000;
 const INF: i32 = i32::MAX - 1;
 const NULL_MOVE_REDUCTION: u32 = 2;
+
+const TT_INDEX_BITS: u32 = 20;
+const TT_SIZE: usize = 1 << TT_INDEX_BITS;
+const TT_MASK: u64 = (TT_SIZE as u64) - 1;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 enum Bound {
@@ -30,10 +34,52 @@ struct TTEntry {
     best_move: Option<Move>,
 }
 
+#[derive(Copy, Clone)]
+struct TTSlot {
+    key: u64,
+    entry: TTEntry,
+}
+
+struct TranspositionTable {
+    slots: Vec<Option<TTSlot>>,
+}
+
+impl TranspositionTable {
+    fn new() -> Self {
+        Self {
+            slots: vec![None; TT_SIZE],
+        }
+    }
+
+    fn clear(&mut self) {
+        self.slots.iter_mut().for_each(|s| *s = None);
+    }
+
+    fn get(&self, key: u64) -> Option<&TTEntry> {
+        let idx = (key & TT_MASK) as usize;
+        self.slots[idx]
+            .as_ref()
+            .filter(|slot| slot.key == key)
+            .map(|slot| &slot.entry)
+    }
+
+    fn insert(&mut self, key: u64, entry: TTEntry) {
+        let idx = (key & TT_MASK) as usize;
+        let should_replace = match &self.slots[idx] {
+            None => true,
+            Some(slot) => slot.key == key || entry.depth >= slot.entry.depth,
+        };
+        if should_replace {
+            self.slots[idx] = Some(TTSlot { key, entry });
+        }
+    }
+}
+
 pub struct Search {
-    tt: HashMap<u64, TTEntry>,
+    tt: TranspositionTable,
     killers: [[Option<Move>; 2]; 128],
     search_path: Vec<u64>,
+    move_buffers: Vec<Vec<Move>>,
     nodes: u64,
     start_time: Instant,
     time_limit: Duration,
@@ -43,9 +89,10 @@ pub struct Search {
 impl Search {
     pub fn new() -> Self {
         Self {
-            tt: HashMap::new(),
+            tt: TranspositionTable::new(),
             killers: [[None; 2]; 128],
             search_path: Vec::new(),
+            move_buffers: Vec::new(),
             nodes: 0,
             start_time: Instant::now(),
             time_limit: Duration::from_millis(0),
@@ -53,14 +100,21 @@ impl Search {
         }
     }
 
-    /// Clears all persistent search state. Not needed between `analyze`
-    /// calls on the same game — the TT stays valid across the whole
-    /// game since a position is a position regardless of move order.
-    /// Call this only when starting a genuinely new game.
     pub fn reset(&mut self) {
         self.tt.clear();
         self.killers = [[None; 2]; 128];
         self.search_path.clear();
+    }
+
+    fn take_buffer(&mut self, idx: usize) -> Vec<Move> {
+        while self.move_buffers.len() <= idx {
+            self.move_buffers.push(Vec::new());
+        }
+        mem::take(&mut self.move_buffers[idx])
+    }
+
+    fn return_buffer(&mut self, idx: usize, buf: Vec<Move>) {
+        self.move_buffers[idx] = buf;
     }
 
     pub fn find_best_move(
@@ -72,9 +126,6 @@ impl Search {
         self.start_time = Instant::now();
         self.time_limit = Duration::from_millis(time_limit_ms);
         self.nodes = 0;
-        // Deliberately NOT clearing `tt`/`killers` here: persisting them
-        // across calls means repeated `analyze` invocations on the same
-        // or a nearby position converge faster instead of starting over.
 
         let mut best_overall: Option<(Move, i32)> = None;
 
@@ -107,8 +158,11 @@ impl Search {
     }
 
     fn negamax_root(&mut self, board: &mut Board, depth: u32) -> Option<(Move, i32)> {
-        let moves = board.generate_moves();
+        let mut moves = self.take_buffer(0);
+        board.generate_moves_into(&mut moves);
+
         if moves.is_empty() {
+            self.return_buffer(0, moves);
             return None;
         }
 
@@ -116,14 +170,14 @@ impl Search {
         self.search_path.push(board.zobrist);
 
         let key = tt_key(board);
-        let ordered = self.order_moves(board, moves, key, 0);
+        self.order_moves_in_place(board, &mut moves, key, 0);
 
         let mut alpha = -INF;
         let beta = INF;
         let mut best_move = None;
         let mut best_score = -INF;
 
-        for mv in ordered {
+        for &mv in moves.iter() {
             if let Ok(undo) = board.make_move(mv.from_row, mv.from_col, mv.to_row, mv.to_col) {
                 let is_repetition = self.search_path.contains(&board.zobrist);
                 let score = if is_repetition {
@@ -141,6 +195,7 @@ impl Search {
                 board.unmake_move(undo);
 
                 if self.stop {
+                    self.return_buffer(0, moves);
                     return best_move.map(|m| (m, best_score));
                 }
 
@@ -154,6 +209,7 @@ impl Search {
             }
         }
 
+        self.return_buffer(0, moves);
         best_move.map(|m| (m, best_score))
     }
 
@@ -177,7 +233,7 @@ impl Search {
         let alpha_orig = alpha;
         let key = tt_key(board);
 
-        if let Some(entry) = self.tt.get(&key) {
+        if let Some(entry) = self.tt.get(key) {
             if entry.depth >= depth {
                 match entry.bound {
                     Bound::Exact => return entry.score,
@@ -190,18 +246,20 @@ impl Search {
             }
         }
 
-        let moves = board.generate_moves();
+        let ply_idx = ply as usize;
+        let mut moves = self.take_buffer(ply_idx);
+        board.generate_moves_into(&mut moves);
+
         if moves.is_empty() {
+            self.return_buffer(ply_idx, moves);
             return -(MATE_VALUE - ply as i32);
         }
 
         if depth == 0 {
-            return self.quiescence(board, alpha, beta);
+            self.return_buffer(ply_idx, moves);
+            return self.quiescence(board, alpha, beta, ply + 1);
         }
 
-        // Null-move pruning: only in genuinely quiet positions. Captures
-        // are mandatory in this game, so "passing" only makes sense to
-        // simulate when no capture is actually forced right now.
         if depth >= 3
             && board.forced_piece.is_none()
             && !board.player_has_any_capture(board.current_turn)
@@ -214,18 +272,20 @@ impl Search {
             board.switch_turn();
 
             if self.stop {
+                self.return_buffer(ply_idx, moves);
                 return 0;
             }
             if null_score >= beta {
+                self.return_buffer(ply_idx, moves);
                 return beta;
             }
         }
 
-        let ordered = self.order_moves(board, moves, key, ply);
+        self.order_moves_in_place(board, &mut moves, key, ply);
         let mut best_score = -INF;
         let mut best_move = None;
 
-        for mv in ordered {
+        for &mv in moves.iter() {
             if let Ok(undo) = board.make_move(mv.from_row, mv.from_col, mv.to_row, mv.to_col) {
                 let is_repetition = self.search_path.contains(&board.zobrist);
                 let score = if is_repetition {
@@ -243,6 +303,7 @@ impl Search {
                 board.unmake_move(undo);
 
                 if self.stop {
+                    self.return_buffer(ply_idx, moves);
                     return 0;
                 }
 
@@ -261,6 +322,8 @@ impl Search {
                 }
             }
         }
+
+        self.return_buffer(ply_idx, moves);
 
         let bound = if best_score <= alpha_orig {
             Bound::Upper
@@ -283,7 +346,7 @@ impl Search {
         best_score
     }
 
-    fn quiescence(&mut self, board: &mut Board, mut alpha: i32, beta: i32) -> i32 {
+    fn quiescence(&mut self, board: &mut Board, mut alpha: i32, beta: i32, ply: u32) -> i32 {
         self.nodes += 1;
 
         if self.nodes % 2048 == 0 && self.start_time.elapsed() >= self.time_limit {
@@ -300,22 +363,27 @@ impl Search {
             return evaluate(board);
         }
 
-        let moves = board.generate_moves();
+        let ply_idx = ply as usize;
+        let mut moves = self.take_buffer(ply_idx);
+        board.generate_moves_into(&mut moves);
+
         if moves.is_empty() {
+            self.return_buffer(ply_idx, moves);
             return evaluate(board);
         }
 
         let mut best = -INF;
-        for mv in moves {
+        for &mv in moves.iter() {
             if let Ok(undo) = board.make_move(mv.from_row, mv.from_col, mv.to_row, mv.to_col) {
                 let score = if undo.turn_switched {
-                    -self.quiescence(board, -beta, -alpha)
+                    -self.quiescence(board, -beta, -alpha, ply + 1)
                 } else {
-                    self.quiescence(board, alpha, beta)
+                    self.quiescence(board, alpha, beta, ply + 1)
                 };
                 board.unmake_move(undo);
 
                 if self.stop {
+                    self.return_buffer(ply_idx, moves);
                     return 0;
                 }
 
@@ -330,6 +398,8 @@ impl Search {
                 }
             }
         }
+
+        self.return_buffer(ply_idx, moves);
         best
     }
 
@@ -341,8 +411,8 @@ impl Search {
         }
     }
 
-    fn order_moves(&self, board: &Board, mut moves: Vec<Move>, key: u64, ply: u32) -> Vec<Move> {
-        let tt_best = self.tt.get(&key).and_then(|e| e.best_move);
+    fn order_moves_in_place(&self, board: &Board, moves: &mut [Move], key: u64, ply: u32) {
+        let tt_best = self.tt.get(key).and_then(|e| e.best_move);
         let killer_idx = (ply as usize) % self.killers.len();
         let killers = self.killers[killer_idx];
 
@@ -362,8 +432,6 @@ impl Search {
             }
             order_key
         });
-
-        moves
     }
 }
 
@@ -389,7 +457,6 @@ fn estimate_capture_value(board: &Board, mv: &Move) -> i32 {
     0
 }
 
-/// Score-dominant HCE, from `board.current_turn`'s perspective.
 pub fn evaluate(board: &Board) -> i32 {
     let score_diff = board.p1_score - board.p2_score;
 

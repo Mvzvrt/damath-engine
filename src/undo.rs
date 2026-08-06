@@ -5,7 +5,6 @@ pub struct Undo {
     pub(crate) from_idx: usize,
     pub(crate) to_idx: usize,
     pub(crate) moved_chip: Chip,
-    pub(crate) was_dama_before: bool,
     pub(crate) promoted: bool,
     pub(crate) capture: Option<CaptureUndo>,
     pub(crate) prev_forced_piece: Option<(usize, usize)>,

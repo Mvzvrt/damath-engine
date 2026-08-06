@@ -3,8 +3,8 @@ use crate::piece::{Chip, Player};
 use crate::undo::{CaptureUndo, Undo};
 use crate::zobrist;
 
-const FILE_A: u64 = 0x0101010101010101; // col 0
-const FILE_H: u64 = 0x8080808080808080; // col 7
+const FILE_A: u64 = 0x0101010101010101;
+const FILE_H: u64 = 0x8080808080808080;
 
 #[inline(always)]
 fn shift_nw(bb: u64) -> u64 {
@@ -76,8 +76,6 @@ impl Board {
         board
     }
 
-    /// Full recompute of the Zobrist hash from board state. Only ever
-    /// called once, at construction — every other update is incremental.
     fn compute_zobrist_from_scratch(&self) -> u64 {
         let tables = zobrist::tables();
         let mut hash = 0u64;
@@ -106,16 +104,18 @@ impl Board {
     pub fn display(&self) {
         println!();
 
-        let col_header = "      0     1     2     3     4     5     6     7   ";
-        let top_border = "   ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐  ";
-        let mid_border = "   ├─────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┤  ";
-        let bottom_border = "   └─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘  ";
-        let gap = "   ";
+        let col_header: &str = "      0     1     2     3     4     5     6     7   ";
+        let top_border: &str = "   ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐  ";
+        let mid_border: &str = "   ├─────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┤  ";
+        let bottom_border: &str = "   └─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘  ";
+        let gap: String = " ".repeat(20);
+        let board_header_padding: String = " ".repeat(25);
+        let operator_header_padding: String = " ".repeat(48);
 
         const DARK_BG: &str = "\x1b[100m";
         const RESET: &str = "\x1b[0m";
 
-        println!("{}{}{}", "   BOARD", gap, "   OPERATORS");
+        println!("{}{}{}{}{}", board_header_padding, "BOARD", gap, operator_header_padding, "OPERATORS");
         println!("{}{}{}", col_header, gap, col_header);
         println!("{}{}{}", top_border, gap, top_border);
 
@@ -259,30 +259,34 @@ impl Board {
         false
     }
 
-    /// Generates all legal moves for `self.current_turn`, respecting
-    /// mandatory-capture and chain rules. Single source of truth for
-    /// move shape — `make_move` re-validates independently.
-    pub fn generate_moves(&self) -> Vec<Move> {
+    pub fn generate_moves_into(&self, buf: &mut Vec<Move>) {
+        buf.clear();
         let mover = self.current_turn;
 
         if let Some((r, c)) = self.forced_piece {
-            return self.generate_captures_for_piece(r as i32, c as i32);
+            self.push_captures_for_piece(r as i32, c as i32, buf);
+            return;
         }
 
         if self.player_has_any_capture(mover) {
-            return self.generate_all_captures(mover);
+            self.push_all_captures(mover, buf);
+        } else {
+            self.push_all_slides(mover, buf);
         }
-
-        self.generate_all_slides(mover)
     }
 
-    /// Move count for `player`, independent of whose turn it actually is.
-    /// Used by evaluation for a mobility heuristic — not a legality check.
+    /// Move *count* for `player`, independent of whose turn it actually
+    /// is. Used by `evaluate()` for mobility — called at every leaf node,
+    /// so this deliberately never builds a Vec at all (not even a reused
+    /// one): it walks the same shape as generation but only increments a
+    /// counter. Kept as separate logic from generate_* on purpose, since
+    /// "count moves" and "collect moves" have different perf profiles at
+    /// this call frequency; any rule change here must be mirrored above.
     pub fn generate_moves_for(&self, player: Player) -> usize {
         if self.player_has_any_capture(player) {
-            self.generate_all_captures(player).len()
+            self.count_all_captures(player)
         } else {
-            self.generate_all_slides(player).len()
+            self.count_all_slides(player)
         }
     }
 
@@ -293,18 +297,16 @@ impl Board {
         }
     }
 
-    fn generate_all_captures(&self, mover: Player) -> Vec<Move> {
-        let mut moves = Vec::new();
+    fn push_all_captures(&self, mover: Player, buf: &mut Vec<Move>) {
         let mut bb = self.owner_bits(mover);
         while bb != 0 {
             let idx = bb.trailing_zeros() as i32;
-            moves.extend(self.generate_captures_for_piece(idx / 8, idx % 8));
+            self.push_captures_for_piece(idx / 8, idx % 8, buf);
             bb &= bb - 1;
         }
-        moves
     }
 
-    fn generate_captures_for_piece(&self, row: i32, col: i32) -> Vec<Move> {
+    fn push_captures_for_piece(&self, row: i32, col: i32, buf: &mut Vec<Move>) {
         let from_idx = (row * 8 + col) as usize;
         let from_bit = 1u64 << from_idx;
         let is_dama = (self.dama_pieces & from_bit) != 0;
@@ -312,7 +314,6 @@ impl Board {
         let opponent = if is_p1 { self.p2_pieces } else { self.p1_pieces };
         let occupied = self.p1_pieces | self.p2_pieces;
 
-        let mut moves = Vec::new();
         let directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)];
 
         for &(dr, dc) in &directions {
@@ -339,7 +340,7 @@ impl Board {
                         if (occupied & bit) != 0 {
                             break;
                         }
-                        moves.push(Move { from_row: row, from_col: col, to_row: r, to_col: c });
+                        buf.push(Move { from_row: row, from_col: col, to_row: r, to_col: c });
                     }
                     step += 1;
                 }
@@ -352,17 +353,15 @@ impl Board {
                     let mid_bit = 1u64 << (mid_r * 8 + mid_c) as usize;
                     let to_bit = 1u64 << (to_r * 8 + to_c) as usize;
                     if (opponent & mid_bit) != 0 && (occupied & to_bit) == 0 {
-                        moves.push(Move { from_row: row, from_col: col, to_row: to_r, to_col: to_c });
+                        buf.push(Move { from_row: row, from_col: col, to_row: to_r, to_col: to_c });
                     }
                 }
             }
         }
-        moves
     }
 
-    fn generate_all_slides(&self, mover: Player) -> Vec<Move> {
+    fn push_all_slides(&self, mover: Player, buf: &mut Vec<Move>) {
         let occupied = self.p1_pieces | self.p2_pieces;
-        let mut moves = Vec::new();
         let mut bb = self.owner_bits(mover);
 
         while bb != 0 {
@@ -384,7 +383,7 @@ impl Board {
                         if (occupied & (1u64 << (r * 8 + c) as usize)) != 0 {
                             break;
                         }
-                        moves.push(Move { from_row: row, from_col: col, to_row: r, to_col: c });
+                        buf.push(Move { from_row: row, from_col: col, to_row: r, to_col: c });
                         step += 1;
                     }
                 }
@@ -395,14 +394,125 @@ impl Board {
                     let c = col + dc;
                     if (0..8).contains(&r) && (0..8).contains(&c) {
                         if (occupied & (1u64 << (r * 8 + c) as usize)) == 0 {
-                            moves.push(Move { from_row: row, from_col: col, to_row: r, to_col: c });
+                            buf.push(Move { from_row: row, from_col: col, to_row: r, to_col: c });
                         }
                     }
                 }
             }
             bb &= bb - 1;
         }
-        moves
+    }
+
+    fn count_all_captures(&self, mover: Player) -> usize {
+        let mut count = 0usize;
+        let mut bb = self.owner_bits(mover);
+        while bb != 0 {
+            let idx = bb.trailing_zeros() as i32;
+            count += self.count_captures_for_piece(idx / 8, idx % 8);
+            bb &= bb - 1;
+        }
+        count
+    }
+
+    fn count_captures_for_piece(&self, row: i32, col: i32) -> usize {
+        let from_idx = (row * 8 + col) as usize;
+        let from_bit = 1u64 << from_idx;
+        let is_dama = (self.dama_pieces & from_bit) != 0;
+        let is_p1 = (self.p1_pieces & from_bit) != 0;
+        let opponent = if is_p1 { self.p2_pieces } else { self.p1_pieces };
+        let occupied = self.p1_pieces | self.p2_pieces;
+
+        let mut count = 0usize;
+        let directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)];
+
+        for &(dr, dc) in &directions {
+            if is_dama {
+                let mut step = 1;
+                let mut jumped = false;
+                loop {
+                    let r = row + dr * step;
+                    let c = col + dc * step;
+                    if !(0..8).contains(&r) || !(0..8).contains(&c) {
+                        break;
+                    }
+                    let bit = 1u64 << (r * 8 + c) as usize;
+
+                    if !jumped {
+                        if (occupied & bit) != 0 {
+                            if (opponent & bit) != 0 {
+                                jumped = true;
+                            } else {
+                                break;
+                            }
+                        }
+                    } else {
+                        if (occupied & bit) != 0 {
+                            break;
+                        }
+                        count += 1;
+                    }
+                    step += 1;
+                }
+            } else {
+                let mid_r = row + dr;
+                let mid_c = col + dc;
+                let to_r = row + dr * 2;
+                let to_c = col + dc * 2;
+                if (0..8).contains(&to_r) && (0..8).contains(&to_c) {
+                    let mid_bit = 1u64 << (mid_r * 8 + mid_c) as usize;
+                    let to_bit = 1u64 << (to_r * 8 + to_c) as usize;
+                    if (opponent & mid_bit) != 0 && (occupied & to_bit) == 0 {
+                        count += 1;
+                    }
+                }
+            }
+        }
+        count
+    }
+
+    fn count_all_slides(&self, mover: Player) -> usize {
+        let occupied = self.p1_pieces | self.p2_pieces;
+        let mut count = 0usize;
+        let mut bb = self.owner_bits(mover);
+
+        while bb != 0 {
+            let idx = bb.trailing_zeros() as i32;
+            let row = idx / 8;
+            let col = idx % 8;
+            let from_bit = 1u64 << idx;
+            let is_dama = (self.dama_pieces & from_bit) != 0;
+
+            if is_dama {
+                for &(dr, dc) in &[(-1, -1), (-1, 1), (1, -1), (1, 1)] {
+                    let mut step = 1;
+                    loop {
+                        let r = row + dr * step;
+                        let c = col + dc * step;
+                        if !(0..8).contains(&r) || !(0..8).contains(&c) {
+                            break;
+                        }
+                        if (occupied & (1u64 << (r * 8 + c) as usize)) != 0 {
+                            break;
+                        }
+                        count += 1;
+                        step += 1;
+                    }
+                }
+            } else {
+                let dr = if mover == Player::Player1 { 1 } else { -1 };
+                for &dc in &[-1, 1] {
+                    let r = row + dr;
+                    let c = col + dc;
+                    if (0..8).contains(&r) && (0..8).contains(&c) {
+                        if (occupied & (1u64 << (r * 8 + c) as usize)) == 0 {
+                            count += 1;
+                        }
+                    }
+                }
+            }
+            bb &= bb - 1;
+        }
+        count
     }
 
     pub fn make_move(
@@ -476,7 +586,6 @@ impl Board {
         let prev_forced_piece = self.forced_piece;
         let mover = self.current_turn;
 
-        // 1. SIMPLE SLIDE MOVE
         if dist == 1 || (dist > 1 && is_dama && !self.piece_has_any_capture(from_row, from_col)) {
             if dist == 1 {
                 if self.forced_piece.is_some() {
@@ -506,7 +615,7 @@ impl Board {
                     from_idx,
                     to_idx,
                     moved_chip: chip,
-                    was_dama_before: is_dama,
+                    
                     promoted,
                     capture: None,
                     prev_forced_piece,
@@ -524,7 +633,7 @@ impl Board {
                     from_idx,
                     to_idx,
                     moved_chip: chip,
-                    was_dama_before: is_dama,
+                    
                     promoted: false,
                     capture: None,
                     prev_forced_piece,
@@ -534,7 +643,6 @@ impl Board {
             }
         }
 
-        // 2. CAPTURE MOVE
         let mut found_jumped = None;
         let mut curr_r = from_row + step_r;
         let mut curr_c = from_col + step_c;
@@ -628,7 +736,7 @@ impl Board {
             from_idx,
             to_idx,
             moved_chip: chip,
-            was_dama_before: is_dama,
+            
             promoted,
             capture,
             prev_forced_piece,
@@ -756,9 +864,6 @@ impl Board {
         self.zobrist ^= tables.piece_key(to_idx, player, was_dama, chip.value);
     }
 
-    /// Toggles whose turn it is, keeping the hash in sync. `pub(crate)`
-    /// because the engine's null-move pruning also needs this — always
-    /// paired with a second call to undo it there.
     pub(crate) fn switch_turn(&mut self) {
         self.current_turn = self.current_turn.opponent();
         self.zobrist ^= zobrist::tables().side_key;
