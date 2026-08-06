@@ -386,7 +386,7 @@ fn run_analysis(board: &mut Board, search: &mut Search) {
         if input.is_empty() {
             print!("\x1B[2J\x1B[1;1H");
             board.display();
-            println!("Analyzing (depth up to 24, 8s budget)...\n");
+            println!("Analyzing (depth up to {}, {}s budget)...\n", ENGINE_DEPTH, ENGINE_TIME_LIMIT);
 
             match search.find_best_move(board, ENGINE_DEPTH, ENGINE_TIME_LIMIT, true) {
                 Some((mv, score)) => {
