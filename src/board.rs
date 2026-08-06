@@ -33,6 +33,13 @@ pub struct Move {
     pub to_col: i32,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum GameOutcome {
+    Player1Win,
+    Player2Win,
+    Draw,
+}
+
 impl Move {
     pub fn is_capture(&self) -> bool {
         (self.to_row - self.from_row).abs() >= 2
@@ -275,19 +282,54 @@ impl Board {
         }
     }
 
-    /// Move *count* for `player`, independent of whose turn it actually
-    /// is. Used by `evaluate()` for mobility — called at every leaf node,
-    /// so this deliberately never builds a Vec at all (not even a reused
-    /// one): it walks the same shape as generation but only increments a
-    /// counter. Kept as separate logic from generate_* on purpose, since
-    /// "count moves" and "collect moves" have different perf profiles at
-    /// this call frequency; any rule change here must be mirrored above.
     pub fn generate_moves_for(&self, player: Player) -> usize {
         if self.player_has_any_capture(player) {
             self.count_all_captures(player)
         } else {
             self.count_all_slides(player)
         }
+    }
+
+    pub fn final_score_diff(&self) -> i32 {
+        self.p1_score + self.remaining_piece_value(Player::Player1)
+            - (self.p2_score + self.remaining_piece_value(Player::Player2))
+    }
+
+    pub fn remaining_piece_value(&self, player: Player) -> i32 {
+        let pieces = self.owner_bits(player);
+        let mut total = 0i32;
+
+        for idx in 0..64 {
+            let bit = 1u64 << idx;
+            if (pieces & bit) != 0 {
+                total += self.chips[idx]
+                    .expect("remaining_piece_value called with a missing chip")
+                    .value;
+            }
+        }
+
+        total
+    }
+
+    pub fn has_any_pieces(&self, player: Player) -> bool {
+        self.owner_bits(player) != 0
+    }
+
+    pub fn has_legal_moves_for(&self, player: Player) -> bool {
+        self.generate_moves_for(player) > 0
+    }
+
+    pub fn terminal_outcome(&self) -> Option<GameOutcome> {
+        if self.has_any_pieces(self.current_turn) && self.has_legal_moves_for(self.current_turn) {
+            return None;
+        }
+
+        let final_diff = self.final_score_diff();
+        Some(match final_diff.cmp(&0) {
+            std::cmp::Ordering::Greater => GameOutcome::Player1Win,
+            std::cmp::Ordering::Less => GameOutcome::Player2Win,
+            std::cmp::Ordering::Equal => GameOutcome::Draw,
+        })
     }
 
     fn owner_bits(&self, player: Player) -> u64 {

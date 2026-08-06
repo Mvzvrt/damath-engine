@@ -7,7 +7,28 @@ mod zobrist;
 
 use board::Board;
 use engine::Search;
+use piece::Player;
 use std::io::{self, Write};
+
+fn format_game_over(board: &Board) -> String {
+    let p1_final = board.p1_score + board.remaining_piece_value(Player::Player1);
+    let p2_final = board.p2_score + board.remaining_piece_value(Player::Player2);
+
+    match p1_final.cmp(&p2_final) {
+        std::cmp::Ordering::Greater => format!(
+            "Game over. Player 1 wins. Final scores: {} to {}.",
+            p1_final, p2_final
+        ),
+        std::cmp::Ordering::Less => format!(
+            "Game over. Player 2 wins. Final scores: {} to {}.",
+            p1_final, p2_final
+        ),
+        std::cmp::Ordering::Equal => format!(
+            "Game over. Draw. Final scores: {} to {}.",
+            p1_final, p2_final
+        ),
+    }
+}
 
 fn main() {
     let mut board = Board::new();
@@ -19,6 +40,19 @@ fn main() {
     );
 
     loop {
+        if board.terminal_outcome().is_some() {
+            info_message = format_game_over(&board);
+            print!("\x1B[2J\x1B[1;1H");
+            board.display();
+            println!("-------------------------------------------------------");
+            println!("Turn: {:?}", board.current_turn);
+            println!("Player 1: {}", board.p1_score);
+            println!("Player 2: {}", board.p2_score);
+            println!("Info: {}", info_message);
+            println!("-------------------------------------------------------");
+            break;
+        }
+
         print!("\x1B[2J\x1B[1;1H");
         board.display();
         println!("-------------------------------------------------------");
@@ -125,6 +159,10 @@ fn main() {
             Err(err) => {
                 info_message = format!("{}", err);
             }
+        }
+
+        if board.terminal_outcome().is_some() {
+            info_message = format_game_over(&board);
         }
     }
 }

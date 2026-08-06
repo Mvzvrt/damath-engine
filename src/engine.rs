@@ -252,7 +252,7 @@ impl Search {
 
         if moves.is_empty() {
             self.return_buffer(ply_idx, moves);
-            return -(MATE_VALUE - ply as i32);
+            return terminal_evaluate(board);
         }
 
         if depth == 0 {
@@ -369,7 +369,7 @@ impl Search {
 
         if moves.is_empty() {
             self.return_buffer(ply_idx, moves);
-            return evaluate(board);
+            return terminal_evaluate(board);
         }
 
         let mut best = -INF;
@@ -521,4 +521,13 @@ fn mix_scores(p1_score: i32, p2_score: i32) -> u64 {
     x = x.wrapping_mul(0x94D049BB133111EB);
     x ^= x >> 31;
     x
+}
+
+fn terminal_evaluate(board: &Board) -> i32 {
+    let final_score = board.final_score_diff();
+
+    match board.current_turn {
+        Player::Player1 => final_score,
+        Player::Player2 => -final_score,
+    }
 }
