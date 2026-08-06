@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 const ENGINE_DEPTH: u32 = 24;
 const ENGINE_TIME_LIMIT: u64 = 8_000;
 const ENGINE_VS_ENGINE_MIN_MOVE_DELAY: Duration = Duration::from_secs(1);
+const EXIT_MESSAGE: &str = "\nBye!";
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum SessionMode {
@@ -33,7 +34,7 @@ fn hero_art() -> &'static str {
 ██║  ██║███████║██╔████╔██║███████║ ╚███╔╝ 
 ██║  ██║██╔══██║██║╚██╔╝██║██╔══██║ ██╔██╗ 
 ██████╔╝██║  ██║██║ ╚═╝ ██║██║  ██║██╔╝ ██╗
-╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝
+╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ by Mvzvrt
 "#
 }
 
@@ -217,7 +218,7 @@ fn run_human_vs_human(board: &mut Board) {
 
         let input = input.trim();
             if input.eq_ignore_ascii_case("quit") || input.eq_ignore_ascii_case("exit") {
-            println!("Exiting DaMath engine. Goodbye!");
+            println!("{}", EXIT_MESSAGE);
             break;
         }
 
@@ -290,7 +291,7 @@ fn run_human_vs_engine(board: &mut Board, search: &mut Search) {
 
         let input = input.trim();
             if input.eq_ignore_ascii_case("quit") || input.eq_ignore_ascii_case("exit") {
-            println!("Exiting DaMath engine. Goodbye!");
+            println!("{}", EXIT_MESSAGE);
             break;
         }
 
@@ -444,7 +445,7 @@ fn main() {
         print_start_screen();
         let mode = prompt_mode();
         if mode == SessionMode::Quit {
-            println!("Exiting DaMath engine. Goodbye!");
+            println!("{}", EXIT_MESSAGE);
             break;
         }
 
