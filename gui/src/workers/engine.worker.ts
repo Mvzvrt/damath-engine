@@ -1,4 +1,4 @@
-import init, { DamathWasmEngine } from 'nub';
+import init, { DamathWasmEngine } from '../pkg/nub';
 import {
   EngineRequest,
   EngineSnapshot,
