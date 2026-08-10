@@ -8,6 +8,8 @@ interface PieceProps {
   isDama: boolean;
   id: string;
   isError?: boolean;
+  isGameOver?: boolean;
+  staggerIndex?: number;
 }
 
 export const Piece: React.FC<PieceProps> = ({
@@ -16,18 +18,27 @@ export const Piece: React.FC<PieceProps> = ({
   isDama,
   id,
   isError = false,
+  isGameOver = false,
+  staggerIndex = 0,
 }) => {
   const isP1 = player === 1;
 
   return (
     <motion.div
       layoutId={id}
-      animate={isError ? { x: [-6, 6, -6, 6, 0] } : {}}
+      animate={
+        isGameOver
+          ? { scale: [1, 1.25, 0], opacity: [1, 1, 0] }
+          : isError
+          ? { x: [-6, 6, -6, 6, 0] }
+          : { scale: 1, opacity: 1 }
+      }
       transition={{
-        type: 'spring',
+        type: isGameOver ? 'keyframes' : 'spring',
+        duration: isGameOver ? 0.5 : 0.3,
+        delay: isGameOver ? staggerIndex * 0.07 : 0,
         stiffness: 400,
         damping: 30,
-        x: { duration: 0.3 },
       }}
       style={{
         backgroundImage: isP1

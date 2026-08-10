@@ -84,6 +84,8 @@ export const Board: React.FC<BoardProps> = ({
     }
   };
 
+  let pieceCount = 0;
+
   return (
     <div
       className="w-full h-full p-2 sm:p-3 rounded-md shadow-2xl"
@@ -122,6 +124,8 @@ export const Board: React.FC<BoardProps> = ({
             sq.chip_value !== null &&
             sq.chip_value !== undefined;
 
+          const currentPieceIndex = hasPiece ? pieceCount++ : 0;
+
           return (
             <Square
               key={`${sq.row}-${sq.col}`}
@@ -141,6 +145,8 @@ export const Board: React.FC<BoardProps> = ({
                   player={sq.chip_player!}
                   isDama={sq.is_dama}
                   isError={isError}
+                  isGameOver={boardState.is_game_over}
+                  staggerIndex={currentPieceIndex}
                 />
               )}
             </Square>

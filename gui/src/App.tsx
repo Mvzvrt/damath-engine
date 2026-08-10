@@ -195,7 +195,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#161F1B] text-[#EDE6D6] flex items-center justify-center p-4 md:p-8 relative">
 
-      {/* DIFFICULTY SELECTION MODAL — a number line, not a pricing table */}
+      {/* DIFFICULTY SELECTION MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-[#0F1512]/85 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-[#1E2A24] border border-[#33443B] rounded-lg p-7 shadow-2xl">
@@ -258,64 +258,65 @@ export default function App() {
         </div>
       )}
 
+      {/* MAIN LAYOUT — Scaled boundaries for 1.2x visuals at 100% display zoom */}
       <div className="w-full max-w-6xl flex flex-col lg:flex-row items-center lg:items-stretch justify-center gap-10">
 
-  {/* LEFT: Board Container (Scaled 1.2x: 560px -> 672px) */}
-  <div className="w-full max-w-[672px] aspect-square flex-shrink-0 flex items-center justify-center">
-    <Board
-      boardState={boardState}
-      legalMoves={legalMoves}
-      onExecuteMove={handleExecuteMove}
-      inputDisabled={Boolean(isAiTurn || isCalculating || isModalOpen)}
-      errorSquare={errorSquare}
-    />
-  </div>
+        {/* LEFT: Board Container */}
+        <div className="w-full max-w-[672px] aspect-square flex-shrink-0 flex items-center justify-center">
+          <Board
+            boardState={boardState}
+            legalMoves={legalMoves}
+            onExecuteMove={handleExecuteMove}
+            inputDisabled={Boolean(isAiTurn || isCalculating || isModalOpen)}
+            errorSquare={errorSquare}
+          />
+        </div>
 
-  {/* RIGHT: Sidebar (Scaled 1.2x: max-w-md -> max-w-[538px]) */}
-  <div className="w-full max-w-[538px] flex flex-col justify-between bg-[#1E2A24] border border-[#33443B] rounded-lg p-7 shadow-2xl">
+        {/* RIGHT: Sidebar */}
+        <div className="w-full max-w-[538px] flex flex-col justify-between bg-[#1E2A24] border border-[#33443B] rounded-lg p-7 shadow-2xl">
 
           {/* Header */}
           <div className="border-b border-[#33443B] pb-4">
-            <h1 className="font-serif text-2xl text-[#F4EFDD]">
+            <h1 className="font-serif text-3xl text-[#F4EFDD]">
               Integer Damath
             </h1>
-            <p className="text-xs text-[#EDE6D6]/40 mt-1">
+            <p className="text-sm text-[#EDE6D6]/40 mt-1">
               Damax is inspired by pre-NNUE Stockfish architecture.
             </p>
           </div>
 
           {/* Player Cards & Game Status */}
-          <div className="flex flex-col gap-3 my-auto py-6">
+          <div className="flex flex-col gap-4 my-auto py-6">
 
             {/* Damax Score Card (Top) */}
             <div
-              className={`p-4 rounded-md border flex items-center justify-between transition-colors ${
+              className={`p-5 rounded-md border flex items-center justify-between transition-colors ${
                 isP2Winner
                   ? 'bg-[#3A2414] border-[#C98246]'
                   : 'bg-[#161F1B] border-[#33443B]'
               }`}
             >
               <div className="flex items-center gap-3">
-                <div className="w-2.5 h-2.5 rounded-full bg-[#C98246] flex-shrink-0" />
+                <div className="w-3 h-3 rounded-full bg-[#C98246] flex-shrink-0" />
                 <div>
-                  <div className="font-medium text-[#EDE6D6] text-sm flex items-center gap-1.5">
+                  <div className="font-medium text-[#EDE6D6] text-base flex items-center gap-2">
                     <span>Damax</span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#33443B]/60 text-[#EDE6D6]/50">
+                    <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-[#33443B]/60 text-[#EDE6D6]/50">
                       {selectedDifficulty.label}
                     </span>
-                    {isP2Winner && <Crown className="w-3.5 h-3.5 text-[#C98246]" />}
+                    {isP2Winner && <Crown className="w-4 h-4 text-[#C98246]" />}
                   </div>
                   <div className="h-[15px] mt-0.5">
                     {isP2Turn && !isGameOver && (
                       <motion.div
                         layoutId="turn-marker"
-                        className="h-[3px] w-7 rounded-full bg-[#C98246]"
+                        className="h-[3px] w-8 rounded-full bg-[#C98246]"
                       />
                     )}
                   </div>
                 </div>
               </div>
-              <div className="text-3xl font-mono text-[#EDE6D6]">
+              <div className="text-4xl font-mono text-[#EDE6D6]">
                 {p2Score ?? 0}
               </div>
             </div>
@@ -330,16 +331,16 @@ export default function App() {
                     animate={{ opacity: 1 }}
                     className="flex flex-col items-center gap-3"
                   >
-                    <p className="text-sm text-[#EDE6D6]/70">
+                    <p className="text-base text-[#EDE6D6]/70">
                       {boardState.outcome === 'Draw'
                         ? "It's a draw."
                         : `${isP1Winner ? 'Player 1' : 'Damax'} wins.`}
                     </p>
                     <button
                       onClick={handleResetGame}
-                      className="px-4 py-2 bg-[#3E6B99] hover:bg-[#4A7BAA] text-[#F4EFDD] text-xs font-medium rounded-md transition-colors flex items-center gap-2 cursor-pointer active:scale-95"
+                      className="px-5 py-2.5 bg-[#3E6B99] hover:bg-[#4A7BAA] text-[#F4EFDD] text-xs font-medium rounded-md transition-colors flex items-center gap-2 cursor-pointer active:scale-95"
                     >
-                      <RotateCcw className="w-3.5 h-3.5" />
+                      <RotateCcw className="w-4 h-4" />
                       <span>Play again</span>
                     </button>
                   </motion.div>
@@ -348,7 +349,7 @@ export default function App() {
                     key="status"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="text-xs text-[#EDE6D6]/40"
+                    className="text-sm text-[#EDE6D6]/40"
                   >
                     {isAiTurn || isCalculating
                       ? 'Damax is thinking…'
@@ -362,30 +363,30 @@ export default function App() {
 
             {/* Player 1 Score Card (Bottom) */}
             <div
-              className={`p-4 rounded-md border flex items-center justify-between transition-colors ${
+              className={`p-5 rounded-md border flex items-center justify-between transition-colors ${
                 isP1Winner
                   ? 'bg-[#1C2E3F] border-[#3E6B99]'
                   : 'bg-[#161F1B] border-[#33443B]'
               }`}
             >
               <div className="flex items-center gap-3">
-                <div className="w-2.5 h-2.5 rounded-full bg-[#3E6B99] flex-shrink-0" />
+                <div className="w-3 h-3 rounded-full bg-[#3E6B99] flex-shrink-0" />
                 <div>
-                  <div className="font-medium text-[#EDE6D6] text-sm flex items-center gap-1.5">
+                  <div className="font-medium text-[#EDE6D6] text-base flex items-center gap-2">
                     <span>Player 1</span>
-                    {isP1Winner && <Crown className="w-3.5 h-3.5 text-[#C98246]" />}
+                    {isP1Winner && <Crown className="w-4 h-4 text-[#C98246]" />}
                   </div>
                   <div className="h-[15px] mt-0.5">
                     {isP1Turn && !isGameOver && (
                       <motion.div
                         layoutId="turn-marker"
-                        className="h-[3px] w-7 rounded-full bg-[#3E6B99]"
+                        className="h-[3px] w-8 rounded-full bg-[#3E6B99]"
                       />
                     )}
                   </div>
                 </div>
               </div>
-              <div className="text-3xl font-mono text-[#EDE6D6]">
+              <div className="text-4xl font-mono text-[#EDE6D6]">
                 {p1Score ?? 0}
               </div>
             </div>
@@ -393,12 +394,12 @@ export default function App() {
           </div>
 
           {/* Footer */}
-          <div className="border-t border-[#33443B] pt-3 text-xs text-[#EDE6D6]/40 flex justify-between items-center">
+          <div className="border-t border-[#33443B] pt-4 text-xs text-[#EDE6D6]/40 flex justify-between items-center">
             <button
               onClick={handleResetGame}
-              className="hover:text-[#EDE6D6]/80 transition-colors flex items-center gap-1 cursor-pointer"
+              className="hover:text-[#EDE6D6]/80 transition-colors flex items-center gap-1.5 cursor-pointer"
             >
-              <RotateCcw className="w-3 h-3" />
+              <RotateCcw className="w-3.5 h-3.5" />
               <span>Reset game</span>
             </button>
 

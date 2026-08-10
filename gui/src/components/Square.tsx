@@ -28,7 +28,6 @@ export const Square: React.FC<SquareProps> = ({
   onClick,
   children,
 }) => {
-  // Playable diagonal squares always have an odd coordinate sum
   const isPlayable = (row + col) % 2 === 1;
 
   return (
@@ -93,12 +92,12 @@ export const Square: React.FC<SquareProps> = ({
         </span>
       )}
 
-      {/* Legal move target — High-contrast warm accent dot */}
-{isLegalTarget && !isError && (
-  <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-    <div className="w-4 h-4 sm:w-6 sm:h-6 rounded-full bg-[#C98246] ring-4 ring-[#C98246]/30 shadow-md border border-[#2A1D13]/30 animate-scale-up" />
-  </div>
-)}
+      {/* High-contrast legal target indicator */}
+      {isLegalTarget && !isError && (
+        <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+          <div className="w-4 h-4 sm:w-6 sm:h-6 rounded-full bg-[#C98246] ring-4 ring-[#C98246]/30 shadow-md border border-[#2A1D13]/30 animate-scale-up" />
+        </div>
+      )}
 
       {children}
     </div>
