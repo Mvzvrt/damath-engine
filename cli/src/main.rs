@@ -1,14 +1,7 @@
-mod board;
-mod engine;
-mod operator;
-mod piece;
-mod undo;
-mod zobrist;
-
-use board::Board;
-use board::GameOutcome;
-use engine::Search;
-use piece::Player;
+use core::board::Board;
+use core::board::GameOutcome;
+use core::engine::Search;
+use core::piece::Player;
 use std::io::{self, Write};
 use std::thread;
 use std::time::{Duration, Instant};
