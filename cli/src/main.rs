@@ -1,7 +1,7 @@
-use core::board::Board;
-use core::board::GameOutcome;
-use core::engine::Search;
-use core::piece::Player;
+use nub::board::Board;
+use nub::board::GameOutcome;
+use nub::engine::Search;
+use nub::piece::Player;
 use std::io::{self, Write};
 use std::thread;
 use std::time::{Duration, Instant};

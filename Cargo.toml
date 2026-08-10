@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "core",
+    "nub",
     "cli",
 ]
 resolver = "2"
