@@ -31,3 +31,22 @@ export interface JsBoardState {
   p1_final_score: number;
   p2_final_score: number;
 }
+
+export interface EngineSnapshot {
+  state: JsBoardState;
+  legalMoves: JsMove[];
+}
+
+export type EngineRequest =
+  | { type: 'INIT' }
+  | { type: 'GET_SNAPSHOT'; requestId: number }
+  | { type: 'MAKE_MOVE'; requestId: number; payload: JsMove }
+  | { type: 'FIND_BEST_MOVE'; requestId: number; payload: { depth: number; timeLimitMs: number } }
+  | { type: 'MAKE_BEST_MOVE'; requestId: number; payload: { depth: number; timeLimitMs: number } }
+  | { type: 'RESET'; requestId: number };
+
+export type EngineResponse =
+  | { type: 'READY'; payload: EngineSnapshot }
+  | { type: 'RESULT'; requestId: number; payload: EngineSnapshot }
+  | { type: 'BEST_MOVE_RESULT'; requestId: number; payload: JsBestMove | null }
+  | { type: 'ERROR'; requestId?: number; payload: string };

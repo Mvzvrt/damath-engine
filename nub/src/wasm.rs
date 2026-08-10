@@ -3,6 +3,7 @@ use crate::engine::Search;
 use crate::operator::Operator;
 use crate::piece::Player;
 use serde::{Deserialize, Serialize};
+use serde_wasm_bindgen::Serializer;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(start)]
@@ -66,7 +67,7 @@ impl DamathWasmEngine {
 
     pub fn get_state(&self) -> Result<JsValue, JsValue> {
         let state = self.build_js_state();
-        serde_wasm_bindgen::to_value(&state).map_err(|e| JsValue::from_str(&e.to_string()))
+        to_js_value(&state)
     }
 
     pub fn make_move(&mut self, from_row: i32, from_col: i32, to_row: i32, to_col: i32) -> Result<JsValue, JsValue> {
@@ -172,4 +173,12 @@ impl DamathWasmEngine {
             p2_final_score: p2_final,
         }
     }
+}
+
+
+fn to_js_value<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
+    let serializer = Serializer::new().serialize_missing_as_null(true);
+    value
+        .serialize(&serializer)
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
