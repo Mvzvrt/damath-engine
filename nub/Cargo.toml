@@ -4,12 +4,14 @@ version = "0.1.0"
 edition = "2021"
 description = "A WebAssembly utility for Integer DaMath Engine."
 license = "MIT"
-repository = "https://github.com/Mvzvrt/damath-engine/tree/master/nub"
+repository = "https://github.com/Mvzvrt/damath-engine/"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+console_error_panic_hook = "0.1.7"
 serde = { version = "1.0.229", features = ["derive"] }
 serde-wasm-bindgen = "0.6.5"
 wasm-bindgen = "0.2.127"
+web-time = "1.1.0"

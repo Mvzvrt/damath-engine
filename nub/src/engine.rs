@@ -1,7 +1,7 @@
 use crate::board::{Board, Move};
 use crate::piece::Player;
 use std::mem;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 const SCORE_WEIGHT: i32 = 100;
 const MATERIAL_WEIGHT: i32 = 1;

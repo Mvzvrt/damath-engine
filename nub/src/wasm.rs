@@ -5,6 +5,11 @@ use crate::piece::Player;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
+#[wasm_bindgen(start)]
+pub fn init_panic_hook() {
+    console_error_panic_hook::set_once();
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct JsMove {
     pub from_row: i32,
@@ -117,14 +122,14 @@ impl DamathWasmEngine {
             let col = (idx % 8) as i32;
             let bit = 1u64 << idx;
 
-            let op_str = self.board.operators[idx].map(|op| match op {
+            let op_str = self.board.operators.get(idx).and_then(|op| *op).map(|op| match op {
                 Operator::Add => "+",
                 Operator::Sub => "-",
                 Operator::Mul => "x",
                 Operator::Div => "÷",
             }.to_string());
 
-            let chip = self.board.chips[idx];
+            let chip = self.board.chips.get(idx).and_then(|c| *c);
             let is_p1 = (self.board.p1_pieces & bit) != 0;
             let is_p2 = (self.board.p2_pieces & bit) != 0;
             let chip_player = if is_p1 { Some(1) } else if is_p2 { Some(2) } else { None };
