@@ -12,6 +12,11 @@ interface SquareProps {
   children?: React.ReactNode;
 }
 
+const WOOD_GRAIN =
+  'repeating-linear-gradient(115deg, rgba(0,0,0,0.16) 0px, rgba(0,0,0,0.16) 1px, transparent 1px, transparent 5px), linear-gradient(135deg, #3B2A1D 0%, #2A1D13 60%, #33241A 100%)';
+const PAPER_GRAIN =
+  'radial-gradient(rgba(59,42,29,0.05) 1px, transparent 1px), linear-gradient(160deg, #EDE6D6 0%, #E6DDC8 100%)';
+
 export const Square: React.FC<SquareProps> = ({
   row,
   col,
@@ -29,25 +34,29 @@ export const Square: React.FC<SquareProps> = ({
   return (
     <div
       onClick={onClick}
-      className={`relative w-full h-full flex items-center justify-center select-none transition-colors cursor-pointer overflow-hidden ${
+      style={
         isError
-          ? 'bg-red-600 z-30 animate-pulse'
-          : isPlayable
-          ? 'bg-slate-100'
-          : 'bg-slate-950'
+          ? undefined
+          : {
+              backgroundImage: isPlayable ? PAPER_GRAIN : WOOD_GRAIN,
+              backgroundSize: isPlayable ? '6px 6px, 100% 100%' : '100% 100%',
+            }
+      }
+      className={`relative w-full h-full flex items-center justify-center select-none transition-colors cursor-pointer overflow-hidden ${
+        isError ? 'bg-[#8C3A2E] z-30' : ''
       } ${
         !isError && isSelected
-          ? 'ring-4 ring-blue-500 ring-inset z-20'
+          ? 'ring-inset ring-[3px] ring-[#F4EFDD]/90 z-20'
           : !isError && isForced
-          ? 'ring-4 ring-amber-500 ring-inset animate-pulse z-20'
+          ? 'ring-inset ring-[3px] ring-[#C98246] animate-pulse z-20'
           : ''
       }`}
     >
-      {/* Operator watermark inside playable white squares */}
+      {/* Operator watermark inside playable squares */}
       {isPlayable && operator && (
         <span
-          className={`absolute bottom-0.5 right-1 text-xs sm:text-sm font-black font-mono pointer-events-none select-none z-0 ${
-            isError ? 'text-white/80' : 'text-slate-800'
+          className={`absolute bottom-0.5 right-1 text-xs sm:text-sm font-semibold font-mono pointer-events-none select-none z-0 ${
+            isError ? 'text-white/80' : 'text-[#3B2A1D]/60'
           }`}
         >
           {operator}
@@ -57,12 +66,12 @@ export const Square: React.FC<SquareProps> = ({
       {/* Row labels on left edge */}
       {col === 0 && (
         <span
-          className={`absolute top-0.5 left-1 text-[9px] sm:text-[11px] font-mono font-bold pointer-events-none z-0 ${
+          className={`absolute top-0.5 left-1 text-[9px] sm:text-[11px] font-mono pointer-events-none z-0 ${
             isError
               ? 'text-white/80'
               : isPlayable
-              ? 'text-slate-400'
-              : 'text-slate-600'
+              ? 'text-[#3B2A1D]/40'
+              : 'text-[#EDE6D6]/25'
           }`}
         >
           {row}
@@ -72,22 +81,22 @@ export const Square: React.FC<SquareProps> = ({
       {/* Column labels on bottom edge */}
       {row === 0 && (
         <span
-          className={`absolute bottom-0.5 left-1 text-[9px] sm:text-[11px] font-mono font-bold pointer-events-none z-0 ${
+          className={`absolute bottom-0.5 left-1 text-[9px] sm:text-[11px] font-mono pointer-events-none z-0 ${
             isError
               ? 'text-white/80'
               : isPlayable
-              ? 'text-slate-400'
-              : 'text-slate-600'
+              ? 'text-[#3B2A1D]/40'
+              : 'text-[#EDE6D6]/25'
           }`}
         >
           {col}
         </span>
       )}
 
-      {/* Legal Move Target Indicator */}
+      {/* Legal move target — a chalk dot, not a UI-kit indicator */}
       {isLegalTarget && !isError && (
         <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-          <div className="w-4 h-4 sm:w-6 sm:h-6 rounded-full bg-emerald-500/80 ring-4 ring-emerald-400/30 animate-scale-up" />
+          <div className="w-3.5 h-3.5 sm:w-5 sm:h-5 rounded-full bg-[#F4EFDD]/70 ring-2 ring-[#F4EFDD]/30 animate-scale-up" />
         </div>
       )}
 

@@ -85,58 +85,68 @@ export const Board: React.FC<BoardProps> = ({
   };
 
   return (
-    <div className="w-full h-full grid grid-cols-8 grid-rows-8 aspect-square rounded-lg overflow-hidden border border-slate-800 shadow-2xl bg-slate-950">
-      {displaySquares.map((sq) => {
-        const isSelected =
-          selectedPos !== null &&
-          selectedPos[0] === sq.row &&
-          selectedPos[1] === sq.col;
+    <div
+      className="w-full h-full p-2 sm:p-3 rounded-md shadow-2xl"
+      style={{
+        backgroundImage:
+          'linear-gradient(155deg, #4A3521 0%, #2E2114 100%)',
+        boxShadow:
+          'inset 0 0 0 1px rgba(0,0,0,0.4), inset 0 2px 3px rgba(255,255,255,0.06), 0 20px 40px -12px rgba(0,0,0,0.6)',
+      }}
+    >
+      <div className="w-full h-full grid grid-cols-8 grid-rows-8 aspect-square overflow-hidden rounded-sm">
+        {displaySquares.map((sq) => {
+          const isSelected =
+            selectedPos !== null &&
+            selectedPos[0] === sq.row &&
+            selectedPos[1] === sq.col;
 
-        const isLegalTarget = availableDestinations.some(
-          (move) => move.to_row === sq.row && move.to_col === sq.col,
-        );
+          const isLegalTarget = availableDestinations.some(
+            (move) => move.to_row === sq.row && move.to_col === sq.col,
+          );
 
-        const isForced =
-          boardState.forced_piece != null &&
-          boardState.forced_piece[0] === sq.row &&
-          boardState.forced_piece[1] === sq.col;
+          const isForced =
+            boardState.forced_piece != null &&
+            boardState.forced_piece[0] === sq.row &&
+            boardState.forced_piece[1] === sq.col;
 
-        const isError =
-          errorSquare != null &&
-          errorSquare.row === sq.row &&
-          errorSquare.col === sq.col;
+          const isError =
+            errorSquare != null &&
+            errorSquare.row === sq.row &&
+            errorSquare.col === sq.col;
 
-        const isPlayable = (sq.row + sq.col) % 2 === 1;
-        const hasPiece =
-          isPlayable &&
-          (sq.chip_player === 1 || sq.chip_player === 2) &&
-          sq.chip_value !== null &&
-          sq.chip_value !== undefined;
+          const isPlayable = (sq.row + sq.col) % 2 === 1;
+          const hasPiece =
+            isPlayable &&
+            (sq.chip_player === 1 || sq.chip_player === 2) &&
+            sq.chip_value !== null &&
+            sq.chip_value !== undefined;
 
-        return (
-          <Square
-            key={`${sq.row}-${sq.col}`}
-            row={sq.row}
-            col={sq.col}
-            operator={sq.operator}
-            isSelected={isSelected}
-            isLegalTarget={isLegalTarget}
-            isForced={isForced}
-            isError={isError}
-            onClick={() => handleSquareClick(sq.row, sq.col)}
-          >
-            {hasPiece && (
-              <Piece
-                id={`piece-r${sq.row}-c${sq.col}`}
-                value={sq.chip_value!}
-                player={sq.chip_player!}
-                isDama={sq.is_dama}
-                isError={isError}
-              />
-            )}
-          </Square>
-        );
-      })}
+          return (
+            <Square
+              key={`${sq.row}-${sq.col}`}
+              row={sq.row}
+              col={sq.col}
+              operator={sq.operator}
+              isSelected={isSelected}
+              isLegalTarget={isLegalTarget}
+              isForced={isForced}
+              isError={isError}
+              onClick={() => handleSquareClick(sq.row, sq.col)}
+            >
+              {hasPiece && (
+                <Piece
+                  id={`piece-r${sq.row}-c${sq.col}`}
+                  value={sq.chip_value!}
+                  player={sq.chip_player!}
+                  isDama={sq.is_dama}
+                  isError={isError}
+                />
+              )}
+            </Square>
+          );
+        })}
+      </div>
     </div>
   );
 };

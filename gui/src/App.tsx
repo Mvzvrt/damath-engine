@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Crown, RotateCcw, Zap, Brain, Cpu, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Crown, RotateCcw } from 'lucide-react';
 import { Board } from './components/Board';
 import { useEngineWorker } from './hooks/useEngineWorker';
 import { JsMove } from './types/damath';
@@ -21,34 +22,34 @@ interface DifficultyOption {
   label: string;
   timeLimit: number;
   depth: number;
+  timeLabel: string;
   description: string;
-  icon: React.ElementType;
 }
 
 const DIFFICULTY_OPTIONS: DifficultyOption[] = [
   {
     id: 'easy',
-    label: 'Easy',
+    label: 'Quick',
     depth: 24,
     timeLimit: 1000,
-    description: 'The engine will only be thinking for a second. Faster but weaker.',
-    icon: Zap,
+    timeLabel: '~1s / move',
+    description: 'Damax moves fast and plays a bit loose. Good for learning the board.',
   },
   {
     id: 'balanced',
     label: 'Balanced',
     depth: 24,
     timeLimit: 5000,
-    description: 'The engine will be thinking for at most five seconds. Solid but maybe beatable.',
-    icon: Brain,
+    timeLabel: '~5s / move',
+    description: 'Damax takes its time. Solid play, still beatable.',
   },
   {
     id: 'advanced',
-    label: 'Advanced',
+    label: 'Deep',
     depth: 24,
     timeLimit: 10000,
-    description: 'The engine will be thinking for at most ten seconds. Slow but will be strong.',
-    icon: Cpu,
+    timeLabel: '~10s / move',
+    description: 'Damax thinks as hard as it can. Expect a real fight.',
   },
 ];
 
@@ -65,6 +66,7 @@ export default function App() {
   } = engineWorker;
 
   const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyOption>(DIFFICULTY_OPTIONS[1]);
+  const [pendingDifficulty, setPendingDifficulty] = useState<DifficultyOption>(DIFFICULTY_OPTIONS[1]);
   const [isModalOpen, setIsModalOpen] = useState(true);
   const [errorSquare, setErrorSquare] = useState<{ row: number; col: number } | null>(null);
 
@@ -156,19 +158,20 @@ export default function App() {
     } else if (typeof worker.restart === 'function') {
       worker.restart();
     }
+    setPendingDifficulty(selectedDifficulty);
     setIsModalOpen(true);
   };
 
-  const handleSelectDifficulty = (option: DifficultyOption) => {
-    setSelectedDifficulty(option);
+  const handleStartGame = () => {
+    setSelectedDifficulty(pendingDifficulty);
     setIsModalOpen(false);
   };
 
   if (!isReady || !boardState) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100">
-        <p className="text-slate-400 animate-pulse font-mono text-sm">
-          Initializing Damath Engine...
+      <div className="flex min-h-screen items-center justify-center bg-[#161F1B] text-[#EDE6D6]">
+        <p className="text-[#EDE6D6]/50 animate-pulse font-mono text-sm">
+          Setting up the board…
         </p>
       </div>
     );
@@ -190,85 +193,74 @@ export default function App() {
     : boardState.p2_score;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 md:p-8 relative">
-      
-      {/* DIFFICULTY SELECTION MODAL */}
+    <div className="min-h-screen bg-[#161F1B] text-[#EDE6D6] flex items-center justify-center p-4 md:p-8 relative">
+
+      {/* DIFFICULTY SELECTION MODAL — a number line, not a pricing table */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
-            
-            <div className="space-y-1 text-center sm:text-left">
-              <h2 className="text-xl font-bold text-white tracking-tight">
-                Select Difficulty
-              </h2>
-              <p className="text-xs text-slate-400 font-mono">
-                Choose how deeply Damax evaluates each move.
+        <div className="fixed inset-0 z-50 bg-[#0F1512]/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-[#1E2A24] border border-[#33443B] rounded-lg p-7 shadow-2xl">
+
+            <h2 className="font-serif text-2xl text-[#F4EFDD] mb-1">
+              How long should Damax think?
+            </h2>
+            <p className="text-sm text-[#EDE6D6]/50 mb-8">
+              Longer thinking makes for a stronger, slower opponent.
+            </p>
+
+            {/* number line */}
+            <div className="relative px-2 mb-6">
+              <div className="absolute left-2 right-2 top-[9px] h-px bg-[#33443B]" />
+              <div className="relative flex justify-between">
+                {DIFFICULTY_OPTIONS.map((option) => {
+                  const isSelected = pendingDifficulty.id === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      onClick={() => setPendingDifficulty(option)}
+                      className="flex flex-col items-center gap-3 cursor-pointer group"
+                    >
+                      <span
+                        className={`block rounded-full transition-all ${
+                          isSelected
+                            ? 'w-[19px] h-[19px] bg-[#C98246] ring-4 ring-[#C98246]/25'
+                            : 'w-[13px] h-[13px] bg-[#EDE6D6]/25 group-hover:bg-[#EDE6D6]/45'
+                        }`}
+                      />
+                      <span
+                        className={`text-sm font-medium ${
+                          isSelected ? 'text-[#F4EFDD]' : 'text-[#EDE6D6]/50'
+                        }`}
+                      >
+                        {option.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="bg-[#161F1B] border border-[#33443B]/70 rounded-md px-4 py-3 mb-7 min-h-[64px]">
+              <p className="text-xs font-mono text-[#C98246] mb-1">
+                {pendingDifficulty.timeLabel}
+              </p>
+              <p className="text-sm text-[#EDE6D6]/70 leading-relaxed">
+                {pendingDifficulty.description}
               </p>
             </div>
 
-            <div className="space-y-3">
-              {DIFFICULTY_OPTIONS.map((option) => {
-                const Icon = option.icon;
-                const isSelected = selectedDifficulty.id === option.id;
-
-                return (
-                  <button
-                    key={option.id}
-                    onClick={() => handleSelectDifficulty(option)}
-                    className={`w-full text-left p-4 rounded-xl border transition-all duration-150 flex items-start gap-4 cursor-pointer group ${
-                      isSelected
-                        ? 'bg-blue-950/40 border-blue-500/80 ring-1 ring-blue-500/30'
-                        : 'bg-slate-950/50 border-slate-800 hover:border-slate-700 hover:bg-slate-800/40'
-                    }`}
-                  >
-                    <div
-                      className={`p-2.5 rounded-lg border transition-colors ${
-                        isSelected
-                          ? 'bg-blue-600/20 border-blue-500/40 text-blue-400'
-                          : 'bg-slate-800/60 border-slate-700/60 text-slate-400 group-hover:text-slate-300'
-                      }`}
-                    >
-                      <Icon className="w-5 h-5" />
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <span
-                          className={`font-semibold text-sm ${
-                            isSelected ? 'text-white' : 'text-slate-200'
-                          }`}
-                        >
-                          {option.label}
-                        </span>
-                        {isSelected && (
-                          <span className="flex items-center gap-1 text-[11px] font-mono font-medium text-blue-400">
-                            <Check className="w-3.5 h-3.5" />
-                            Selected
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                        {option.description}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="pt-2 text-center">
-              <span className="text-[11px] text-slate-500 font-mono">
-                You can adjust difficulty again on any new game.
-              </span>
-            </div>
-
+            <button
+              onClick={handleStartGame}
+              className="w-full py-2.5 bg-[#3E6B99] hover:bg-[#4A7BAA] text-[#F4EFDD] font-medium text-sm rounded-md transition-colors cursor-pointer active:scale-[0.98]"
+            >
+              Start game
+            </button>
           </div>
         </div>
       )}
 
       {/* MAIN LAYOUT */}
       <div className="w-full max-w-5xl flex flex-col lg:flex-row items-center lg:items-stretch justify-center gap-8">
-        
+
         {/* LEFT: Board Container */}
         <div className="w-full max-w-[560px] aspect-square flex-shrink-0 flex items-center justify-center">
           <Board
@@ -281,128 +273,120 @@ export default function App() {
         </div>
 
         {/* RIGHT: Sidebar */}
-        <div className="w-full max-w-md flex flex-col justify-between bg-slate-900 border border-slate-800/80 rounded-2xl p-6 shadow-2xl">
-          
+        <div className="w-full max-w-md flex flex-col justify-between bg-[#1E2A24] border border-[#33443B] rounded-lg p-6 shadow-2xl">
+
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-            <div>
-              <h1 className="text-2xl font-black tracking-tight text-white">
-                Integer Damath
-              </h1>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">
-                Damax is inspired by Pre-NNUE Stockfish architecture.
-              </p>
-            </div>
+          <div className="border-b border-[#33443B] pb-4">
+            <h1 className="font-serif text-2xl text-[#F4EFDD]">
+              Integer Damath
+            </h1>
+            <p className="text-xs text-[#EDE6D6]/40 mt-1">
+              Damax is inspired by pre-NNUE Stockfish architecture.
+            </p>
           </div>
 
           {/* Player Cards & Game Status */}
-          <div className="flex flex-col gap-4 my-auto py-6">
-            
+          <div className="flex flex-col gap-3 my-auto py-6">
+
             {/* Damax Score Card (Top) */}
             <div
-              className={`p-4 rounded-xl border transition-all flex items-center justify-between ${
+              className={`p-4 rounded-md border flex items-center justify-between transition-colors ${
                 isP2Winner
-                  ? 'bg-amber-950/70 border-amber-500 ring-2 ring-amber-500/40 shadow-xl shadow-amber-950/50'
-                  : isP2Turn && !isGameOver
-                  ? 'bg-amber-950/40 border-amber-500/60 shadow-lg shadow-amber-950/20'
-                  : 'bg-slate-950/60 border-slate-800'
+                  ? 'bg-[#3A2414] border-[#C98246]'
+                  : 'bg-[#161F1B] border-[#33443B]'
               }`}
             >
               <div className="flex items-center gap-3">
-                <div className="w-4 h-4 rounded-full bg-amber-500 ring-4 ring-amber-500/20 flex-shrink-0" />
+                <div className="w-2.5 h-2.5 rounded-full bg-[#C98246] flex-shrink-0" />
                 <div>
-                  <div className="font-bold text-slate-200 text-sm flex items-center gap-1.5">
+                  <div className="font-medium text-[#EDE6D6] text-sm flex items-center gap-1.5">
                     <span>Damax</span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#33443B]/60 text-[#EDE6D6]/50">
                       {selectedDifficulty.label}
                     </span>
-                    {isP2Winner && (
-                      <Crown className="w-4 h-4 text-amber-400 fill-amber-400 inline-block" />
+                    {isP2Winner && <Crown className="w-3.5 h-3.5 text-[#C98246]" />}
+                  </div>
+                  <div className="h-[15px] mt-0.5">
+                    {isP2Turn && !isGameOver && (
+                      <motion.div
+                        layoutId="turn-marker"
+                        className="h-[3px] w-7 rounded-full bg-[#C98246]"
+                      />
                     )}
                   </div>
-                  {isP2Winner ? (
-                    <span className="text-[11px] font-mono text-amber-400 font-bold uppercase tracking-wider">
-                      Victorious
-                    </span>
-                  ) : isP2Turn && !isGameOver ? (
-                    <span className="text-[11px] font-mono text-amber-400 animate-pulse">
-                      {isCalculating ? 'Calculating...' : 'Active Turn'}
-                    </span>
-                  ) : null}
                 </div>
               </div>
-              <div
-                className={`text-4xl font-black font-mono tracking-tight ${
-                  isP2Winner ? 'text-amber-300 scale-105' : 'text-amber-400'
-                }`}
-              >
+              <div className="text-3xl font-mono text-[#EDE6D6]">
                 {p2Score ?? 0}
               </div>
             </div>
 
-            {/* Victory Status & Play Again Action */}
-            <div className="text-center py-1">
-              {isGameOver ? (
-                <div className="flex flex-col items-center gap-3">
-                  <p className="text-sm font-medium font-mono text-slate-300">
-                    {boardState.outcome === 'Draw'
-                      ? 'Game is over. It is a draw.'
-                      : `Game is over. ${isP1Winner ? 'Player 1' : 'Damax'} is victorious.`}
-                  </p>
-                  <button
-                    onClick={handleResetGame}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-mono text-xs font-bold rounded-lg shadow-lg shadow-blue-600/30 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+            {/* Status line */}
+            <div className="text-center py-1 min-h-[52px] flex items-center justify-center">
+              <AnimatePresence mode="wait">
+                {isGameOver ? (
+                  <motion.div
+                    key="over"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex flex-col items-center gap-3"
                   >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Play Again</span>
-                  </button>
-                </div>
-              ) : (
-                <span className="text-xs font-mono uppercase tracking-widest text-slate-500">
-                  {isAiTurn || isCalculating
-                    ? 'Engine Thinking...'
-                    : isP1Turn
-                    ? 'Your Turn'
-                    : "Damax's Turn"}
-                </span>
-              )}
+                    <p className="text-sm text-[#EDE6D6]/70">
+                      {boardState.outcome === 'Draw'
+                        ? "It's a draw."
+                        : `${isP1Winner ? 'Player 1' : 'Damax'} wins.`}
+                    </p>
+                    <button
+                      onClick={handleResetGame}
+                      className="px-4 py-2 bg-[#3E6B99] hover:bg-[#4A7BAA] text-[#F4EFDD] text-xs font-medium rounded-md transition-colors flex items-center gap-2 cursor-pointer active:scale-95"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Play again</span>
+                    </button>
+                  </motion.div>
+                ) : (
+                  <motion.span
+                    key="status"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="text-xs text-[#EDE6D6]/40"
+                  >
+                    {isAiTurn || isCalculating
+                      ? 'Damax is thinking…'
+                      : isP1Turn
+                      ? 'Your turn'
+                      : "Damax's turn"}
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Player 1 Score Card (Bottom) */}
             <div
-              className={`p-4 rounded-xl border transition-all flex items-center justify-between ${
+              className={`p-4 rounded-md border flex items-center justify-between transition-colors ${
                 isP1Winner
-                  ? 'bg-blue-950/70 border-blue-500 ring-2 ring-blue-500/40 shadow-xl shadow-blue-950/50'
-                  : isP1Turn && !isGameOver
-                  ? 'bg-blue-950/40 border-blue-500/60 shadow-lg shadow-blue-950/20'
-                  : 'bg-slate-950/60 border-slate-800'
+                  ? 'bg-[#1C2E3F] border-[#3E6B99]'
+                  : 'bg-[#161F1B] border-[#33443B]'
               }`}
             >
               <div className="flex items-center gap-3">
-                <div className="w-4 h-4 rounded-full bg-blue-500 ring-4 ring-blue-500/20 flex-shrink-0" />
+                <div className="w-2.5 h-2.5 rounded-full bg-[#3E6B99] flex-shrink-0" />
                 <div>
-                  <div className="font-bold text-slate-200 text-sm flex items-center gap-1.5">
+                  <div className="font-medium text-[#EDE6D6] text-sm flex items-center gap-1.5">
                     <span>Player 1</span>
-                    {isP1Winner && (
-                      <Crown className="w-4 h-4 text-amber-400 fill-amber-400 inline-block" />
+                    {isP1Winner && <Crown className="w-3.5 h-3.5 text-[#C98246]" />}
+                  </div>
+                  <div className="h-[15px] mt-0.5">
+                    {isP1Turn && !isGameOver && (
+                      <motion.div
+                        layoutId="turn-marker"
+                        className="h-[3px] w-7 rounded-full bg-[#3E6B99]"
+                      />
                     )}
                   </div>
-                  {isP1Winner ? (
-                    <span className="text-[11px] font-mono text-blue-400 font-bold uppercase tracking-wider">
-                      Victorious
-                    </span>
-                  ) : isP1Turn && !isGameOver ? (
-                    <span className="text-[11px] font-mono text-blue-400">
-                      Active Turn
-                    </span>
-                  ) : null}
                 </div>
               </div>
-              <div
-                className={`text-4xl font-black font-mono tracking-tight ${
-                  isP1Winner ? 'text-blue-300 scale-105' : 'text-blue-400'
-                }`}
-              >
+              <div className="text-3xl font-mono text-[#EDE6D6]">
                 {p1Score ?? 0}
               </div>
             </div>
@@ -410,20 +394,20 @@ export default function App() {
           </div>
 
           {/* Footer */}
-          <div className="border-t border-slate-800 pt-3 text-xs text-slate-500 flex justify-between items-center font-mono">
+          <div className="border-t border-[#33443B] pt-3 text-xs text-[#EDE6D6]/40 flex justify-between items-center">
             <button
               onClick={handleResetGame}
-              className="text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1 cursor-pointer"
+              className="hover:text-[#EDE6D6]/80 transition-colors flex items-center gap-1 cursor-pointer"
             >
               <RotateCcw className="w-3 h-3" />
-              <span>Reset Game</span>
+              <span>Reset game</span>
             </button>
 
             <a
               href="https://github.com/Mvzvrt/damath-engine"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-slate-400 hover:text-slate-200 transition-colors"
+              className="flex items-center gap-1.5 hover:text-[#EDE6D6]/80 transition-colors"
             >
               <GithubIcon className="w-4 h-4" />
               <span>Mvzvrt</span>
