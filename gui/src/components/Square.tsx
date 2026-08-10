@@ -7,6 +7,7 @@ interface SquareProps {
   isSelected: boolean;
   isLegalTarget: boolean;
   isForced: boolean;
+  isError?: boolean;
   onClick: () => void;
   children?: React.ReactNode;
 }
@@ -18,45 +19,75 @@ export const Square: React.FC<SquareProps> = ({
   isSelected,
   isLegalTarget,
   isForced,
+  isError = false,
   onClick,
   children,
 }) => {
-  const isDark = (row + col) % 2 === 1;
+  // Playable diagonal squares always have an odd coordinate sum
+  const isPlayable = (row + col) % 2 === 1;
 
   return (
     <div
       onClick={onClick}
-      className={`relative w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center select-none transition-colors cursor-pointer ${
-        isDark ? 'bg-slate-800' : 'bg-slate-700/40'
-      } ${isSelected ? 'ring-4 ring-indigo-500 ring-inset z-10' : ''} ${
-        isForced ? 'ring-4 ring-rose-500/80 ring-inset animate-pulse z-10' : ''
+      className={`relative w-full h-full flex items-center justify-center select-none transition-colors cursor-pointer overflow-hidden ${
+        isError
+          ? 'bg-red-600 z-30 animate-pulse'
+          : isPlayable
+          ? 'bg-slate-100'
+          : 'bg-slate-950'
+      } ${
+        !isError && isSelected
+          ? 'ring-4 ring-blue-500 ring-inset z-20'
+          : !isError && isForced
+          ? 'ring-4 ring-amber-500 ring-inset animate-pulse z-20'
+          : ''
       }`}
     >
-      {/* Operator watermark inside playable dark squares */}
-      {isDark && operator && (
-        <span className="absolute bottom-1 right-1.5 text-xs font-mono font-bold text-slate-500/50 pointer-events-none">
+      {/* Operator watermark inside playable white squares */}
+      {isPlayable && operator && (
+        <span
+          className={`absolute bottom-0.5 right-1 text-xs sm:text-sm font-black font-mono pointer-events-none select-none z-0 ${
+            isError ? 'text-white/80' : 'text-slate-800'
+          }`}
+        >
           {operator}
         </span>
       )}
 
-      {/* Row labels on the left edge */}
+      {/* Row labels on left edge */}
       {col === 0 && (
-        <span className="absolute top-1 left-1.5 text-[10px] font-mono text-slate-500 pointer-events-none">
+        <span
+          className={`absolute top-0.5 left-1 text-[9px] sm:text-[11px] font-mono font-bold pointer-events-none z-0 ${
+            isError
+              ? 'text-white/80'
+              : isPlayable
+              ? 'text-slate-400'
+              : 'text-slate-600'
+          }`}
+        >
           {row}
         </span>
       )}
 
-      {/* Column labels on the bottom edge (Row 0) */}
+      {/* Column labels on bottom edge */}
       {row === 0 && (
-        <span className="absolute bottom-1 left-1.5 text-[10px] font-mono text-slate-500 pointer-events-none">
+        <span
+          className={`absolute bottom-0.5 left-1 text-[9px] sm:text-[11px] font-mono font-bold pointer-events-none z-0 ${
+            isError
+              ? 'text-white/80'
+              : isPlayable
+              ? 'text-slate-400'
+              : 'text-slate-600'
+          }`}
+        >
           {col}
         </span>
       )}
 
-      {/* Legal Move Highlight Indicator */}
-      {isLegalTarget && (
+      {/* Legal Move Target Indicator */}
+      {isLegalTarget && !isError && (
         <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-          <div className="w-5 h-5 rounded-full bg-emerald-400/60 ring-4 ring-emerald-400/20 animate-scale-up" />
+          <div className="w-4 h-4 sm:w-6 sm:h-6 rounded-full bg-emerald-500/80 ring-4 ring-emerald-400/30 animate-scale-up" />
         </div>
       )}
 

@@ -8,6 +8,7 @@ interface BoardProps {
   legalMoves: JsMove[];
   onExecuteMove: (move: JsMove) => void;
   inputDisabled?: boolean;
+  errorSquare?: { row: number; col: number } | null;
 }
 
 export const Board: React.FC<BoardProps> = ({
@@ -15,16 +16,10 @@ export const Board: React.FC<BoardProps> = ({
   legalMoves,
   onExecuteMove,
   inputDisabled = false,
+  errorSquare = null,
 }) => {
   const [selectedPos, setSelectedPos] = useState<[number, number] | null>(null);
 
-  /*
-   * Selection is UI state only.
-   *
-   * Rust owns legality. The legal-move list is consumed here as a
-   * presentation hint for highlighting available destinations and for
-   * making a sensible source-square selection.
-   */
   useEffect(() => {
     if (boardState.forced_piece) {
       setSelectedPos([
@@ -68,21 +63,21 @@ export const Board: React.FC<BoardProps> = ({
     }
 
     if (selectedPos) {
-  const isSameSquare = selectedPos[0] === row && selectedPos[1] === col;
+      const isSameSquare = selectedPos[0] === row && selectedPos[1] === col;
 
-  if (!isSameSquare && hasLegalMoveFrom(row, col)) {
-    setSelectedPos([row, col]);
-    return;
-  }
+      if (!isSameSquare && hasLegalMoveFrom(row, col)) {
+        setSelectedPos([row, col]);
+        return;
+      }
 
-  onExecuteMove({
-    from_row: selectedPos[0],
-    from_col: selectedPos[1],
-    to_row: row,
-    to_col: col,
-  });
-  return;
-}
+      onExecuteMove({
+        from_row: selectedPos[0],
+        from_col: selectedPos[1],
+        to_row: row,
+        to_col: col,
+      });
+      return;
+    }
 
     if (hasLegalMoveFrom(row, col)) {
       setSelectedPos([row, col]);
@@ -90,52 +85,58 @@ export const Board: React.FC<BoardProps> = ({
   };
 
   return (
-    <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl inline-block">
-      <div className="damath-board-grid grid grid-cols-8 gap-0 border border-slate-700/60 rounded-lg overflow-hidden">
-        {displaySquares.map((sq) => {
-          const isSelected =
-            selectedPos !== null &&
-            selectedPos[0] === sq.row &&
-            selectedPos[1] === sq.col;
+    <div className="w-full h-full grid grid-cols-8 grid-rows-8 aspect-square rounded-lg overflow-hidden border border-slate-800 shadow-2xl bg-slate-950">
+      {displaySquares.map((sq) => {
+        const isSelected =
+          selectedPos !== null &&
+          selectedPos[0] === sq.row &&
+          selectedPos[1] === sq.col;
 
-          const isLegalTarget = availableDestinations.some(
-            (move) =>
-              move.to_row === sq.row &&
-              move.to_col === sq.col,
-          );
+        const isLegalTarget = availableDestinations.some(
+          (move) => move.to_row === sq.row && move.to_col === sq.col,
+        );
 
-          const isForced =
-            boardState.forced_piece != null &&
-            boardState.forced_piece[0] === sq.row &&
-            boardState.forced_piece[1] === sq.col;
+        const isForced =
+          boardState.forced_piece != null &&
+          boardState.forced_piece[0] === sq.row &&
+          boardState.forced_piece[1] === sq.col;
 
-          const hasPiece =
-            sq.chip_player !== null &&
-            sq.chip_value !== null;
+        const isError =
+          errorSquare != null &&
+          errorSquare.row === sq.row &&
+          errorSquare.col === sq.col;
 
-          return (
-            <Square
-              key={`${sq.row}-${sq.col}`}
-              row={sq.row}
-              col={sq.col}
-              operator={sq.operator}
-              isSelected={isSelected}
-              isLegalTarget={isLegalTarget}
-              isForced={isForced}
-              onClick={() => handleSquareClick(sq.row, sq.col)}
-            >
-              {hasPiece && (
-                <Piece
-                  id={`piece-r${sq.row}-c${sq.col}`}
-                  value={sq.chip_value!}
-                  player={sq.chip_player!}
-                  isDama={sq.is_dama}
-                />
-              )}
-            </Square>
-          );
-        })}
-      </div>
+        const isPlayable = (sq.row + sq.col) % 2 === 1;
+        const hasPiece =
+          isPlayable &&
+          (sq.chip_player === 1 || sq.chip_player === 2) &&
+          sq.chip_value !== null &&
+          sq.chip_value !== undefined;
+
+        return (
+          <Square
+            key={`${sq.row}-${sq.col}`}
+            row={sq.row}
+            col={sq.col}
+            operator={sq.operator}
+            isSelected={isSelected}
+            isLegalTarget={isLegalTarget}
+            isForced={isForced}
+            isError={isError}
+            onClick={() => handleSquareClick(sq.row, sq.col)}
+          >
+            {hasPiece && (
+              <Piece
+                id={`piece-r${sq.row}-c${sq.col}`}
+                value={sq.chip_value!}
+                player={sq.chip_player!}
+                isDama={sq.is_dama}
+                isError={isError}
+              />
+            )}
+          </Square>
+        );
+      })}
     </div>
   );
 };
