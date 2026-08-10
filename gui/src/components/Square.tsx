@@ -93,12 +93,12 @@ export const Square: React.FC<SquareProps> = ({
         </span>
       )}
 
-      {/* Legal move target — a chalk dot, not a UI-kit indicator */}
-      {isLegalTarget && !isError && (
-        <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-          <div className="w-3.5 h-3.5 sm:w-5 sm:h-5 rounded-full bg-[#F4EFDD]/70 ring-2 ring-[#F4EFDD]/30 animate-scale-up" />
-        </div>
-      )}
+      {/* Legal move target — High-contrast warm accent dot */}
+{isLegalTarget && !isError && (
+  <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+    <div className="w-4 h-4 sm:w-6 sm:h-6 rounded-full bg-[#C98246] ring-4 ring-[#C98246]/30 shadow-md border border-[#2A1D13]/30 animate-scale-up" />
+  </div>
+)}
 
       {children}
     </div>

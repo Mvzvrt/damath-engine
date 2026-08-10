@@ -258,22 +258,21 @@ export default function App() {
         </div>
       )}
 
-      {/* MAIN LAYOUT */}
-      <div className="w-full max-w-5xl flex flex-col lg:flex-row items-center lg:items-stretch justify-center gap-8">
+      <div className="w-full max-w-6xl flex flex-col lg:flex-row items-center lg:items-stretch justify-center gap-10">
 
-        {/* LEFT: Board Container */}
-        <div className="w-full max-w-[560px] aspect-square flex-shrink-0 flex items-center justify-center">
-          <Board
-            boardState={boardState}
-            legalMoves={legalMoves}
-            onExecuteMove={handleExecuteMove}
-            inputDisabled={Boolean(isAiTurn || isCalculating || isModalOpen)}
-            errorSquare={errorSquare}
-          />
-        </div>
+  {/* LEFT: Board Container (Scaled 1.2x: 560px -> 672px) */}
+  <div className="w-full max-w-[672px] aspect-square flex-shrink-0 flex items-center justify-center">
+    <Board
+      boardState={boardState}
+      legalMoves={legalMoves}
+      onExecuteMove={handleExecuteMove}
+      inputDisabled={Boolean(isAiTurn || isCalculating || isModalOpen)}
+      errorSquare={errorSquare}
+    />
+  </div>
 
-        {/* RIGHT: Sidebar */}
-        <div className="w-full max-w-md flex flex-col justify-between bg-[#1E2A24] border border-[#33443B] rounded-lg p-6 shadow-2xl">
+  {/* RIGHT: Sidebar (Scaled 1.2x: max-w-md -> max-w-[538px]) */}
+  <div className="w-full max-w-[538px] flex flex-col justify-between bg-[#1E2A24] border border-[#33443B] rounded-lg p-7 shadow-2xl">
 
           {/* Header */}
           <div className="border-b border-[#33443B] pb-4">
