@@ -70,7 +70,13 @@ impl DamathWasmEngine {
         to_js_value(&state)
     }
 
-    pub fn make_move(&mut self, from_row: i32, from_col: i32, to_row: i32, to_col: i32) -> Result<JsValue, JsValue> {
+    pub fn make_move(
+        &mut self,
+        from_row: i32,
+        from_col: i32,
+        to_row: i32,
+        to_col: i32,
+    ) -> Result<JsValue, JsValue> {
         match self.board.make_move(from_row, from_col, to_row, to_col) {
             Ok(_) => self.get_state(),
             Err(err) => Err(JsValue::from_str(err)),
@@ -93,7 +99,10 @@ impl DamathWasmEngine {
     }
 
     pub fn find_best_move(&mut self, depth: u32, time_limit_ms: u64) -> Result<JsValue, JsValue> {
-        match self.search.find_best_move(&mut self.board, depth, time_limit_ms, false) {
+        match self
+            .search
+            .find_best_move(&mut self.board, depth, time_limit_ms, false)
+        {
             Some((mv, score)) => {
                 let res = JsBestMove {
                     mv: JsMove {
@@ -123,17 +132,26 @@ impl DamathWasmEngine {
             let col = (idx % 8) as i32;
             let bit = 1u64 << idx;
 
-            let op_str = self.board.operators.get(idx).and_then(|op| *op).map(|op| match op {
-                Operator::Add => "+",
-                Operator::Sub => "-",
-                Operator::Mul => "x",
-                Operator::Div => "÷",
-            }.to_string());
+            let op_str = self.board.operators.get(idx).and_then(|op| *op).map(|op| {
+                match op {
+                    Operator::Add => "+",
+                    Operator::Sub => "-",
+                    Operator::Mul => "x",
+                    Operator::Div => "÷",
+                }
+                .to_string()
+            });
 
             let chip = self.board.chips.get(idx).and_then(|c| *c);
             let is_p1 = (self.board.p1_pieces & bit) != 0;
             let is_p2 = (self.board.p2_pieces & bit) != 0;
-            let chip_player = if is_p1 { Some(1) } else if is_p2 { Some(2) } else { None };
+            let chip_player = if is_p1 {
+                Some(1)
+            } else if is_p2 {
+                Some(2)
+            } else {
+                None
+            };
             let is_dama = (self.board.dama_pieces & bit) != 0;
 
             squares.push(JsSquareInfo {
@@ -174,7 +192,6 @@ impl DamathWasmEngine {
         }
     }
 }
-
 
 fn to_js_value<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
     let serializer = Serializer::new().serialize_missing_as_null(true);

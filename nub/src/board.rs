@@ -285,6 +285,54 @@ impl Board {
         false
     }
 
+    fn dama_has_capture_simulated(
+        &self,
+        row: i32,
+        col: i32,
+        jumped_bit: u64,
+        from_bit: u64,
+    ) -> bool {
+        let is_p1 = (self.p1_pieces & from_bit) != 0;
+        let opponent = if is_p1 {
+            self.p2_pieces
+        } else {
+            self.p1_pieces
+        };
+
+        // Simulate the board state after the jump
+        let simulated_opponent = opponent & !jumped_bit;
+        let simulated_occupied = (self.p1_pieces | self.p2_pieces) & !jumped_bit & !from_bit;
+
+        // Re-use the directional scanning logic from dama_has_capture
+        let directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)];
+        for &(dr, dc) in &directions {
+            let mut step = 1;
+            let mut found_opponent = false;
+
+            loop {
+                let r = row + dr * step;
+                let c = col + dc * step;
+                if !(0..8).contains(&r) || !(0..8).contains(&c) {
+                    break;
+                }
+
+                let bit = 1u64 << (r * 8 + c) as usize;
+
+                if (simulated_occupied & bit) != 0 {
+                    if (simulated_opponent & bit) != 0 && !found_opponent {
+                        found_opponent = true;
+                    } else {
+                        break;
+                    }
+                } else if found_opponent {
+                    return true; // Found a valid subsequent capture
+                }
+                step += 1;
+            }
+        }
+        false
+    }
+
     pub fn generate_moves_into(&self, buf: &mut Vec<Move>) {
         buf.clear();
         let mover = self.current_turn;
@@ -384,7 +432,9 @@ impl Board {
         for &(dr, dc) in &directions {
             if is_dama {
                 let mut step = 1;
-                let mut jumped = false;
+                let mut jumped_bit = 0;
+                let mut possible_landings = Vec::new();
+
                 loop {
                     let r = row + dr * step;
                     let c = col + dc * step;
@@ -393,10 +443,10 @@ impl Board {
                     }
                     let bit = 1u64 << (r * 8 + c) as usize;
 
-                    if !jumped {
+                    if jumped_bit == 0 {
                         if (occupied & bit) != 0 {
                             if (opponent & bit) != 0 {
-                                jumped = true;
+                                jumped_bit = bit;
                             } else {
                                 break;
                             }
@@ -405,14 +455,37 @@ impl Board {
                         if (occupied & bit) != 0 {
                             break;
                         }
+                        possible_landings.push((r, c));
+                    }
+                    step += 1;
+                }
+
+                if !possible_landings.is_empty() {
+                    let mut continuing_landings = Vec::new();
+                    let mut terminal_landings = Vec::new();
+
+                    for &(lr, lc) in &possible_landings {
+                        if self.dama_has_capture_simulated(lr, lc, jumped_bit, from_bit) {
+                            continuing_landings.push((lr, lc));
+                        } else {
+                            terminal_landings.push((lr, lc));
+                        }
+                    }
+
+                    let final_landings = if !continuing_landings.is_empty() {
+                        continuing_landings
+                    } else {
+                        terminal_landings
+                    };
+
+                    for (lr, lc) in final_landings {
                         buf.push(Move {
                             from_row: row,
                             from_col: col,
-                            to_row: r,
-                            to_col: c,
+                            to_row: lr,
+                            to_col: lc,
                         });
                     }
-                    step += 1;
                 }
             } else {
                 let mid_r = row + dr;
