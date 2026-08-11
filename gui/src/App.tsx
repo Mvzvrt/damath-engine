@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Crown, RotateCcw } from 'lucide-react';
+import { Crown, HelpCircle, RotateCcw } from 'lucide-react';
 import { Board } from './components/Board';
+import { HowToPlay } from './components/HowToPlay';
 import { useEngineWorker } from './hooks/useEngineWorker';
 import { JsMove } from './types/damath';
 
@@ -68,6 +69,7 @@ export default function App() {
   const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyOption>(DIFFICULTY_OPTIONS[1]);
   const [pendingDifficulty, setPendingDifficulty] = useState<DifficultyOption>(DIFFICULTY_OPTIONS[1]);
   const [isModalOpen, setIsModalOpen] = useState(true);
+  const [isHowToPlayOpen, setIsHowToPlayOpen] = useState(false);
   const [errorSquare, setErrorSquare] = useState<{ row: number; col: number } | null>(null);
 
   const triggerErrorFeedback = (move?: JsMove) => {
@@ -276,13 +278,23 @@ export default function App() {
         <div className="w-full max-w-[538px] flex flex-col justify-between bg-[#1E2A24] border border-[#33443B] rounded-lg p-7 shadow-2xl">
 
           {/* Header */}
-          <div className="border-b border-[#33443B] pb-4">
-            <h1 className="font-serif text-3xl text-[#F4EFDD]">
-              Integer Damath
-            </h1>
-            <p className="text-sm text-[#EDE6D6]/40 mt-1">
-              Damax is inspired by pre-NNUE Stockfish architecture.
-            </p>
+          <div className="border-b border-[#33443B] pb-4 flex items-start justify-between gap-3">
+            <div>
+              <h1 className="font-serif text-3xl text-[#F4EFDD]">
+                Integer Damath
+              </h1>
+              <p className="text-sm text-[#EDE6D6]/40 mt-1">
+                Damax is inspired by pre-NNUE Stockfish architecture.
+              </p>
+            </div>
+            <button
+              onClick={() => setIsHowToPlayOpen(true)}
+              aria-label="How to play"
+              title="How to play"
+              className="flex-shrink-0 w-8 h-8 rounded-full border border-[#33443B] text-[#EDE6D6]/50 hover:text-[#F4EFDD] hover:border-[#C98246]/60 flex items-center justify-center transition-colors cursor-pointer"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </button>
           </div>
 
           {/* Player Cards & Game Status */}
@@ -417,6 +429,8 @@ export default function App() {
         </div>
 
       </div>
+
+      <HowToPlay isOpen={isHowToPlayOpen} onClose={() => setIsHowToPlayOpen(false)} />
     </div>
   );
 }
