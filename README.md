@@ -10,7 +10,7 @@
 
 Damax is an open-source Integer Damath engine with a Rust CLI, a WebAssembly-powered core, and a React + Vite browser UI. It lets you play locally, watch the engine search for moves, and reuse the same rules across terminal and browser.
 
-![Gameplay Demo](https://github.com/user-attachments/assets/9cec03ad-7fb7-4725-b40f-e4e57406e86f)
+![Gameplay Demo](https://github.com/user-attachments/assets/bde1249d-1979-4f29-b76f-12471d44b670)
 
 ## Prerequisites
 
