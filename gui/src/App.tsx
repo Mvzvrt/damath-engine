@@ -5,6 +5,7 @@ import { Board } from './components/Board';
 import { HowToPlay } from './components/HowToPlay';
 import { useEngineWorker } from './hooks/useEngineWorker';
 import { JsMove } from './types/damath';
+import { Analytics } from "@vercel/analytics/react"
 
 function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -431,6 +432,7 @@ export default function App() {
       </div>
 
       <HowToPlay isOpen={isHowToPlayOpen} onClose={() => setIsHowToPlayOpen(false)} />
+      <Analytics />
     </div>
   );
 }
